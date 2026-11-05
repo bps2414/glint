@@ -259,6 +259,8 @@ settings:
   system: "System"
   start_with_os: "Start with Windows"
   check_updates: "Check for updates automatically"
+  discord_presence: "Show on Discord"
+  discord_presence_hint: "Shows \"Clipping with %{name}\" and the time on your Discord profile while %{name} is running. No server or sign-in needed."
   version: "%{name} %{version}"
   check_now: "Check now"
   server: "Server"

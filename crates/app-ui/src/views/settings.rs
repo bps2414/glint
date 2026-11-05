@@ -517,6 +517,18 @@ impl Shell {
                         |c| c.check_updates = !c.check_updates,
                     ),
                     row(
+                        tr("settings.discord_presence"),
+                        Some(tr_args(
+                            "settings.discord_presence_hint",
+                            &[("name", app_core::brand::APP_NAME)],
+                        )),
+                        Toggle::new("set-presence", c.discord_presence).on_click(cx.listener(
+                            |this, _, _, cx| {
+                                this.apply(|c| c.discord_presence = !c.discord_presence, cx)
+                            },
+                        )),
+                    ),
+                    row(
                         tr_args(
                             "settings.version",
                             &[

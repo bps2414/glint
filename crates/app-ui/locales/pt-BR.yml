@@ -259,6 +259,8 @@ settings:
   system: "Sistema"
   start_with_os: "Iniciar com o Windows"
   check_updates: "Procurar atualizações sozinho"
+  discord_presence: "Mostrar no Discord"
+  discord_presence_hint: "Mostra \"Clipping with %{name}\" e o tempo no seu perfil do Discord enquanto o %{name} está aberto. Não precisa de servidor nem login."
   version: "%{name} %{version}"
   check_now: "Procurar agora"
   server: "Servidor"

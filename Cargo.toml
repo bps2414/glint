@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/*", "tools/*"]
 
 [workspace.package]
-version = "1.0.0-rc.1"
+version = "1.0.0-rc.2"
 edition = "2021"
 rust-version = "1.85"
 publish = false
@@ -23,6 +23,7 @@ parking_lot = "0.12"
 crossbeam-channel = "0.5"
 ffmpeg-sys-next = { version = "9", default-features = false, features = ["avcodec", "avformat", "swresample", "swscale"] }
 windows = "0.62"
+discord-rich-presence = "=1.1.0"
 app-core = { path = "crates/app-core" }
 app-media = { path = "crates/app-media" }
 app-platform-win = { path = "crates/app-platform-win" }

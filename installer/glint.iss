@@ -1,5 +1,5 @@
 ; Instalador do Glint (Inno Setup 6). Gerado pelo scripts\release.ps1:
-;   ISCC /DAppVersion=1.0.0-rc.1 /DSrcDir=..\dist\Glint installer\glint.iss
+;   ISCC /DAppVersion=1.0.0-rc.2 /DSrcDir=..\dist\Glint installer\glint.iss
 ; Instala por usuário (sem administrador) em %LOCALAPPDATA%\Programs\Glint.
 ; Clipes e configurações ficam fora da pasta do programa e sobrevivem a desinstalar/atualizar.
 #ifndef AppVersion

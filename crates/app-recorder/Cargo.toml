@@ -27,6 +27,7 @@ app-ipc.workspace = true
 rust-i18n = "4"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 ctrlc = "3"
+discord-rich-presence.workspace = true
 
 # Nome do executável (único lugar além de brand.rs a mudar ao renomear o app).
 [[bin]]

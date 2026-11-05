@@ -15,6 +15,8 @@ mod cli;
 mod daemon;
 mod plan;
 #[cfg(windows)]
+mod presence;
+#[cfg(windows)]
 mod saver;
 #[cfg(windows)]
 mod session;

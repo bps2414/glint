@@ -179,6 +179,9 @@ pub struct Config {
     pub server_url: String,
     /// Procura versão nova do app no servidor (ao abrir e a cada 6 h).
     pub check_updates: bool,
+    /// Mostra "Clipping with Glint" e o tempo no perfil do Discord (Rich Presence) enquanto o
+    /// gravador está aberto. Não precisa de servidor nem de login.
+    pub discord_presence: bool,
     /// Já viu a tela de boas-vindas (primeiro uso).
     pub welcome_done: bool,
     /// Marca d'água (símbolo + "glint") no vídeo exportado/publicado; o clipe original
@@ -202,6 +205,7 @@ impl Default for Config {
             start_with_os: true,
             server_url: String::new(),
             check_updates: true,
+            discord_presence: true,
             welcome_done: false,
             watermark: false,
             watermark_corner: Corner::BottomRight,

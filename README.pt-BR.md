@@ -45,6 +45,9 @@ guarda o lance quando você aperta F8 e transforma o clipe num link que toca dir
 - **Exportar MP4:** salva o trecho recortado no disco, sem publicar nada.
 - **Marca d'água opcional:** desligada por padrão; quando ligada, aparece só nas exportações e nas cópias
   publicadas, nunca no clipe original.
+- **Rich Presence no Discord:** seu perfil mostra "Clipping VALORANT with Glint" (ou "Clipping with
+  Glint" entre um jogo e outro) e o tempo, igual ao Medal. Ligado por padrão; desliga nas
+  Configurações. Funciona sem servidor e sem login.
 - **Visual de vidro** que segue o tema claro/escuro do Windows e fica sólido com "Efeitos de
   transparência" desligados ou em economia de bateria.
 - **Sem nada dentro do jogo:** não injeta, não lê memória, não desenha overlay. Seguro com anti-cheat

@@ -48,6 +48,9 @@ the way, keeps the play when you press F8 and turns the clip into a link that pl
 - **Export MP4:** saves the trimmed part to disk without publishing anything.
 - **Optional watermark:** off by default; when on, it is drawn only on exports and published copies, never
   on the original clip.
+- **Discord Rich Presence:** your profile shows "Clipping VALORANT with Glint" (or "Clipping with
+  Glint" between games) and the time, like Medal. On by default; turn it off in Settings. Works without
+  a server or sign-in.
 - **Glass look** that follows Windows light/dark and turns solid when transparency effects are off or
   on battery saver.
 - **Nothing inside the game:** no injection, no memory reading, no overlay. Safe with anti-cheat such as

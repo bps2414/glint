@@ -7,7 +7,7 @@ in the UI can cost frames in the game**, so recording and the interface are sepa
 
 | Binary | Crate | Role |
 |---|---|---|
-| `glint-recorder` | `app-recorder` | Headless daemon in the tray. Detects the game, captures, encodes, keeps the replay buffer, saves clips on F8. Idle (EcoQoS) when no game is running. |
+| `glint-recorder` | `app-recorder` | Headless daemon in the tray. Detects the game, captures, encodes, keeps the replay buffer, saves clips on F8, shows the optional Discord Rich Presence. Idle (EcoQoS) when no game is running. |
 | `glint` | `app-ui` | The library, editor, player and settings (GPUI + gpui-component). Started on demand; when it closes, it is gone. During a match its cost is zero. |
 
 The two talk over a local socket (`app-ipc`: named pipe on Windows, Unix socket elsewhere) with typed

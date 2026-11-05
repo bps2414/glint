@@ -9,7 +9,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3b7f7f85a7e5f68090000ed7622545829afd484d210358702ae4cb97dd0c320"
 dependencies = [
  "enumn",
- "uuid",
+ "uuid 1.29.0",
 ]
 
 [[package]]
@@ -211,7 +211,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "app-cloud"
-version = "1.0.0-rc.1"
+version = "1.0.0-rc.2"
 dependencies = [
  "base64 0.22.1",
  "getrandom 0.3.4",
@@ -225,7 +225,7 @@ dependencies = [
 
 [[package]]
 name = "app-core"
-version = "1.0.0-rc.1"
+version = "1.0.0-rc.2"
 dependencies = [
  "directories",
  "rusqlite",
@@ -237,7 +237,7 @@ dependencies = [
 
 [[package]]
 name = "app-ipc"
-version = "1.0.0-rc.1"
+version = "1.0.0-rc.2"
 dependencies = [
  "app-core",
  "app-platform-win",
@@ -250,7 +250,7 @@ dependencies = [
 
 [[package]]
 name = "app-media"
-version = "1.0.0-rc.1"
+version = "1.0.0-rc.2"
 dependencies = [
  "app-core",
  "crossbeam-channel",
@@ -262,7 +262,7 @@ dependencies = [
 
 [[package]]
 name = "app-platform-win"
-version = "1.0.0-rc.1"
+version = "1.0.0-rc.2"
 dependencies = [
  "app-core",
  "parking_lot",
@@ -275,7 +275,7 @@ dependencies = [
 
 [[package]]
 name = "app-recorder"
-version = "1.0.0-rc.1"
+version = "1.0.0-rc.2"
 dependencies = [
  "anyhow",
  "app-core",
@@ -284,6 +284,7 @@ dependencies = [
  "app-platform-win",
  "chrono",
  "ctrlc",
+ "discord-rich-presence",
  "embed-resource",
  "parking_lot",
  "rust-i18n",
@@ -295,7 +296,7 @@ dependencies = [
 
 [[package]]
 name = "app-ui"
-version = "1.0.0-rc.1"
+version = "1.0.0-rc.2"
 dependencies = [
  "anyhow",
  "app-cloud",
@@ -1546,6 +1547,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "discord-rich-presence"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90c55d69cab17c19677ce3a5f8face993a9e6eaf847fecac3547f3a3ff4a2494"
+dependencies = [
+ "log",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "serde_repr",
+ "thiserror 2.0.21",
+ "uuid 0.8.2",
+]
+
+[[package]]
 name = "dispatch"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2410,7 +2426,7 @@ dependencies = [
  "tracing",
  "unicode-segmentation",
  "unicode-width",
- "uuid",
+ "uuid 1.29.0",
  "windows 0.58.0",
 ]
 
@@ -2516,7 +2532,7 @@ dependencies = [
  "unicode-segmentation",
  "url",
  "usvg 0.46.0",
- "uuid",
+ "uuid 1.29.0",
  "waker-fn",
  "windows 0.62.2",
  "zed-scap",
@@ -2621,7 +2637,7 @@ dependencies = [
  "objc2-ui-kit",
  "parking_lot",
  "raw-window-handle",
- "uuid",
+ "uuid 1.29.0",
 ]
 
 [[package]]
@@ -2656,7 +2672,7 @@ dependencies = [
  "smol",
  "strum",
  "url",
- "uuid",
+ "uuid 1.29.0",
  "wayland-backend",
  "wayland-client",
  "wayland-cursor",
@@ -2707,7 +2723,7 @@ dependencies = [
  "semver",
  "smallvec",
  "strum",
- "uuid",
+ "uuid 1.29.0",
 ]
 
 [[package]]
@@ -2871,7 +2887,7 @@ dependencies = [
  "unicode-properties",
  "unicode-script",
  "unicode-segmentation",
- "uuid",
+ "uuid 1.29.0",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm_thread",
@@ -2929,7 +2945,7 @@ dependencies = [
  "rand 0.9.5",
  "raw-window-handle",
  "smallvec",
- "uuid",
+ "uuid 1.29.0",
  "windows 0.62.2",
  "windows-core 0.62.2",
  "windows-numerics 0.3.1",
@@ -3988,7 +4004,7 @@ dependencies = [
  "objc2 0.6.5",
  "objc2-foundation 0.3.2",
  "time",
- "uuid",
+ "uuid 1.29.0",
 ]
 
 [[package]]
@@ -3999,7 +4015,7 @@ checksum = "dae608c151f68243f2b000364e1f7b186d9c29845f7d2d85bd31b9ad77ad552b"
 
 [[package]]
 name = "make-icons"
-version = "1.0.0-rc.1"
+version = "1.0.0-rc.2"
 dependencies = [
  "anyhow",
  "ico",
@@ -7643,6 +7659,15 @@ checksum = "3a3b425286980a367278453f3b6d28cdcb134b574e5a35824a6ff5eebad50bb6"
 
 [[package]]
 name = "uuid"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
+dependencies = [
+ "getrandom 0.2.17",
+]
+
+[[package]]
+name = "uuid"
 version = "1.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a0e2d11620c50695fe12bbbfde96b3477fe606e7284c22d505c12ce51214514"
@@ -9010,7 +9035,7 @@ dependencies = [
  "serde_repr",
  "tracing",
  "uds_windows",
- "uuid",
+ "uuid 1.29.0",
  "windows-sys 0.61.2",
  "winnow 1.0.4",
  "zbus_macros",

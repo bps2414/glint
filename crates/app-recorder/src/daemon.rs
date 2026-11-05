@@ -24,6 +24,7 @@ use parking_lot::Mutex;
 use rust_i18n::t;
 
 use crate::plan::{self, Backoff, Want};
+use crate::presence::Presence;
 use crate::saver::{ClipMeta, SaveJob, SaveOutcome, Saver};
 use crate::session::{Health, Session, SessionParams};
 
@@ -98,6 +99,7 @@ pub fn run(autostart_launch: bool) -> Result<()> {
 
     let mut d = Daemon {
         detector: GameDetector::new(&cfg.game),
+        presence: Presence::start(cfg.discord_presence),
         auto_detect: cfg.game.auto_detect,
         cfg,
         cfg_path,
@@ -150,6 +152,8 @@ struct Daemon {
     /// Janela em foco quando o jogo foi detectado.
     game_hwnd: Option<HWND>,
     gpu_watch: Option<GpuWatch>,
+    /// Rich Presence do Discord (thread própria; liga/desliga pela config).
+    presence: Presence,
     session: Option<(Want, Session)>,
     backoff: Backoff,
     last_error: Option<String>,
@@ -186,6 +190,7 @@ impl Daemon {
             s.stop();
         }
         self.tray = None;
+        self.presence.stop();
         // `saver` termina a fila ao ser solto (fim de `run`).
     }
 
@@ -391,6 +396,9 @@ impl Daemon {
         let hotkey_changed = cfg.save_hotkey != self.cfg.save_hotkey;
         let auto = cfg.game.auto_detect;
         self.detector.set_config(&cfg.game);
+        if cfg.discord_presence != self.cfg.discord_presence {
+            self.presence.set_enabled(cfg.discord_presence);
+        }
         self.cfg = cfg;
         if hotkey_changed {
             self.register_hotkey();
@@ -474,6 +482,11 @@ impl Daemon {
         }
         self.reconcile();
         self.check_health();
+        let game = match &self.session {
+            Some((Want::Game(_), s)) => Some(s.info.label.clone()),
+            _ => None,
+        };
+        self.presence.set_game(game);
         if let Some((_, s)) = &self.session {
             if self.last_status_log.elapsed() >= STATUS_LOG_EVERY {
                 self.last_status_log = Instant::now();
