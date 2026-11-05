@@ -1,3 +1,13 @@
 /static/*
   X-Content-Type-Options: nosniff
+
+# Fontes e ícones não mudam: cache de um dia. CSS e JS ficam no padrão dos assets
+# (max-age=0, must-revalidate + ETag), para uma versão nova chegar na hora.
+/static/fonts/*
+  Cache-Control: public, max-age=86400
+
+/static/*.svg
+  Cache-Control: public, max-age=86400
+
+/static/*.ico
   Cache-Control: public, max-age=86400

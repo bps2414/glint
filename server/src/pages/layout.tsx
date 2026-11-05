@@ -29,7 +29,9 @@ export function Layout(props: {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content={THEME_COLOR} />
         <title>{title}</title>
-        <link rel="stylesheet" href="/static/site.css" />
+        {/* `?v=2`: URL nova para quem guardou o site.css antigo (era cache de 1 dia). Agora o CSS
+            revalida sempre (public/_headers), então não precisa mudar a cada versão. */}
+        <link rel="stylesheet" href="/static/site.css?v=2" />
         <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
         <link rel="icon" href="/static/favicon.ico" sizes="16x16 32x32 48x48" />
         {props.head}
