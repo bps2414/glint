@@ -36,6 +36,7 @@ export function Layout(props: {
       </head>
       <body>
         <RefractFilter />
+        <div class="ambient" aria-hidden="true" />
         <div class={props.wide ? "page" : "page narrow"}>
           <header class="top lg lg-refract">
             <a class="brand" href="/">

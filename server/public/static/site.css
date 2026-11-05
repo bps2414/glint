@@ -22,20 +22,23 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body {
-  position: relative; min-height: 100vh; overflow-x: hidden;
+  position: relative; min-height: 100vh; min-height: 100svh; overflow-x: hidden;
   background: var(--bg); color: var(--text);
   font: 15px/1.5 "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
-/* Luz ambiente (a cor do vídeo, no mockup). */
-body::before, body::after {
-  content: ""; position: absolute; z-index: 0; pointer-events: none; border-radius: 50%; left: 50%;
+/* Luz ambiente (a cor do vídeo, no mockup). Os brilhos têm largura fixa (1100px/900px), maiores
+   que um celular: soltos no body, alargavam a área rolável (no mobile, depois de sair da tela
+   cheia, a página ficava "afastada" e com rolagem vazia). O wrapper os recorta ao tamanho do body. */
+.ambient { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.ambient::before, .ambient::after {
+  content: ""; position: absolute; border-radius: 50%; left: 50%;
 }
-body::before {
+.ambient::before {
   top: 120px; width: 1100px; height: 700px; margin-left: -550px; filter: blur(60px);
   background: radial-gradient(closest-side, rgba(86, 112, 138, 0.55), rgba(86, 112, 138, 0));
 }
-body::after {
+.ambient::after {
   top: 420px; width: 900px; height: 420px; margin-left: -200px; filter: blur(70px);
   background: radial-gradient(closest-side, rgba(40, 55, 70, 0.6), rgba(40, 55, 70, 0));
 }
