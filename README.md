@@ -36,6 +36,8 @@ the way, keeps the play when you press F8 and turns the clip into a link that pl
 ## Features
 
 - **Always-ready replay:** the last 60 s (15–120 s) stay in memory; F8 saves in ~150 ms.
+- **Kill clips:** F9 right after a kill saves a short clip around it (8 s before, 2 s after by default);
+  pressing again within 6 s joins the next kill into the same clip (marked x2, x3...).
 - **Light:** capture and encoding on the GPU (AMD AMF, NVIDIA NVENC, Intel QSV), HEVC 1080p60; the
   recorder uses ~1% CPU and stops by itself when the game closes.
 - **Finds the game by itself:** any full-screen game using the GPU; always/never record lists.
@@ -86,6 +88,7 @@ Step-by-step guide (Discord app, secrets, limits): [`docs/DEPLOY.md`](docs/DEPLO
 | Action | How |
 |---|---|
 | Save the play | **F8** (changeable in Settings) |
+| Save a kill | **F9** (changeable in Settings); press again within the combo window to extend the clip |
 | Open the library | click the tray icon or open Glint |
 | Trim | drag the handles on the timeline; the trim is saved |
 | Next clip / play / full screen | ← → / Space / F |

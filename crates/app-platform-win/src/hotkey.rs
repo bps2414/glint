@@ -62,6 +62,11 @@ fn key_to_vk(key: &str) -> Option<u32> {
     })
 }
 
+const BUSY_MSG: &str = "não foi possível registrar a hotkey (outro app já a usa? ex.: Medal)";
+
+/// Resultado do registro de uma hotkey: `Err` com o motivo (em geral, já usada por outro app).
+pub type KeyStatus = std::result::Result<(), String>;
+
 /// Thread que registra as hotkeys e envia o índice da que foi apertada.
 pub struct HotkeyListener {
     thread_id: u32,
@@ -69,25 +74,26 @@ pub struct HotkeyListener {
 }
 
 impl HotkeyListener {
-    /// Registra as hotkeys (na ordem dada). Eventos chegam pelo `Receiver`
-    /// com o índice da hotkey.
-    pub fn start(keys: Vec<Hotkey>) -> Result<(Self, Receiver<usize>)> {
+    /// Registra as hotkeys (na ordem dada), cada uma de forma independente: uma ocupada não
+    /// impede as outras. Devolve o resultado de cada uma, na mesma ordem. Eventos chegam pelo
+    /// `Receiver` com o índice da hotkey.
+    pub fn start(keys: Vec<Hotkey>) -> Result<(Self, Receiver<usize>, Vec<KeyStatus>)> {
         let (tx, rx): (Sender<usize>, Receiver<usize>) = std::sync::mpsc::channel();
-        let (ready_tx, ready_rx) = std::sync::mpsc::channel::<std::result::Result<u32, String>>();
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel::<(u32, Vec<KeyStatus>)>();
         let handle = std::thread::Builder::new()
             .name("hotkeys".into())
             .spawn(move || unsafe {
                 let tid = GetCurrentThreadId();
-                for (i, k) in keys.iter().enumerate() {
-                    let mods = HOT_KEY_MODIFIERS(k.modifiers | MOD_NOREPEAT.0);
-                    if let Err(e) = RegisterHotKey(None, i as i32 + 1, mods, k.vk) {
-                        let _ = ready_tx.send(Err(format!(
-                            "não foi possível registrar a hotkey (já usada por outro app? ex.: Medal): {e}"
-                        )));
-                        return;
-                    }
-                }
-                let _ = ready_tx.send(Ok(tid));
+                let status: Vec<KeyStatus> = keys
+                    .iter()
+                    .enumerate()
+                    .map(|(i, k)| {
+                        let mods = HOT_KEY_MODIFIERS(k.modifiers | MOD_NOREPEAT.0);
+                        RegisterHotKey(None, i as i32 + 1, mods, k.vk)
+                            .map_err(|e| format!("{BUSY_MSG}: {e}"))
+                    })
+                    .collect();
+                let _ = ready_tx.send((tid, status.clone()));
                 let mut msg = MSG::default();
                 while GetMessageW(&mut msg, None, 0, 0).as_bool() {
                     if msg.message == WM_HOTKEY {
@@ -97,23 +103,22 @@ impl HotkeyListener {
                         }
                     }
                 }
-                for i in 0..keys.len() {
-                    let _ = UnregisterHotKey(None, i as i32 + 1);
+                for (i, st) in status.iter().enumerate() {
+                    if st.is_ok() {
+                        let _ = UnregisterHotKey(None, i as i32 + 1);
+                    }
                 }
             })
             .map_err(|e| Error::Other(e.to_string()))?;
         match ready_rx.recv() {
-            Ok(Ok(thread_id)) => Ok((
+            Ok((thread_id, status)) => Ok((
                 Self {
                     thread_id,
                     handle: Some(handle),
                 },
                 rx,
+                status,
             )),
-            Ok(Err(msg)) => {
-                let _ = handle.join();
-                Err(Error::Other(msg))
-            }
             Err(_) => Err(Error::Other("thread de hotkeys morreu".into())),
         }
     }

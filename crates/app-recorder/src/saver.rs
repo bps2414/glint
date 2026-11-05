@@ -8,7 +8,7 @@ use std::thread::JoinHandle;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
-use app_core::library::{Library, NewClip};
+use app_core::library::{ClipKind, Library, NewClip};
 use app_core::{naming, Codec, Config, ReplaySnapshot};
 use app_media::{mux, StreamInfo};
 use app_platform_win::{power, sound};
@@ -23,6 +23,11 @@ pub struct ClipMeta {
     pub height: u32,
     pub fps: u32,
     pub codec: Codec,
+    pub kind: ClipKind,
+    /// Apertos do combo (só clipes de kill).
+    pub kills: Option<u32>,
+    /// Instante da miniatura dentro do clipe. `None` = ponto padrão (perto do fim).
+    pub thumb_at_ms: Option<i64>,
 }
 
 pub struct SaveJob {
@@ -31,7 +36,10 @@ pub struct SaveJob {
     pub meta: ClipMeta,
     pub clips_dir: PathBuf,
     pub disk_limit_bytes: u64,
+    /// Toca o blip ao terminar de salvar.
     pub play_sound: bool,
+    /// Toca o blip de erro se o salvamento falhar.
+    pub error_sound: bool,
 }
 
 #[derive(Debug)]
@@ -129,7 +137,7 @@ fn worker(rx: Receiver<Msg>, report: impl Fn(SaveOutcome)) {
             Ok(outcome) => report(outcome),
             Err(e) => {
                 tracing::error!("falha ao salvar clipe: {e:#}");
-                if job.play_sound {
+                if job.error_sound {
                     sound::play_error_blip();
                 }
                 report(SaveOutcome::Failed(format!("{e:#}")));
@@ -150,7 +158,8 @@ fn save(job: &SaveJob, lib: Option<&Library>) -> Result<SaveOutcome> {
     std::fs::create_dir_all(&job.clips_dir)
         .with_context(|| format!("criando {}", job.clips_dir.display()))?;
     let stamp = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S").to_string();
-    let stem = naming::clip_stem(job.meta.game.as_deref(), &stamp);
+    let kill = job.meta.kind == ClipKind::Kill;
+    let stem = naming::clip_stem(job.meta.game.as_deref(), kill, &stamp);
     let path = naming::unique_path(&job.clips_dir, &stem, "mp4");
 
     let refs: Vec<&StreamInfo> = job.streams.iter().collect();
@@ -170,7 +179,7 @@ fn save(job: &SaveJob, lib: Option<&Library>) -> Result<SaveOutcome> {
         "clipe salvo"
     );
 
-    let thumb = make_thumbnail(&path, duration_ms);
+    let thumb = make_thumbnail(&path, duration_ms, job.meta.thumb_at_ms);
     let mut disk_used = 0;
     let mut removed = 0;
     if let Some(lib) = lib {
@@ -190,6 +199,8 @@ fn save(job: &SaveJob, lib: Option<&Library>) -> Result<SaveOutcome> {
             game: job.meta.game.clone(),
             game_exe: job.meta.game_exe.clone(),
             thumb_path: thumb,
+            kind: job.meta.kind,
+            kills: job.meta.kills,
         };
         if let Err(e) = lib.insert(&clip) {
             tracing::warn!("clipe salvo mas não registrado na biblioteca: {e}");
@@ -207,10 +218,13 @@ fn save(job: &SaveJob, lib: Option<&Library>) -> Result<SaveOutcome> {
     })
 }
 
-fn make_thumbnail(clip: &Path, duration_ms: i64) -> Option<PathBuf> {
+fn make_thumbnail(clip: &Path, duration_ms: i64, at_ms: Option<i64>) -> Option<PathBuf> {
     let name = clip.file_stem()?.to_string_lossy().into_owned();
     let out = Config::thumbs_dir().join(format!("{name}.jpg"));
-    let at = app_media::thumbnail_time_ms(duration_ms);
+    let at = match at_ms {
+        Some(ms) => ms.clamp(0, duration_ms.max(0)),
+        None => app_media::thumbnail_time_ms(duration_ms),
+    };
     match app_media::thumbnail(clip, at, &out, THUMB_WIDTH) {
         Ok(_) => Some(out),
         Err(e) => {

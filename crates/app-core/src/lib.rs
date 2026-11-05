@@ -14,7 +14,7 @@ pub mod packet;
 pub mod replay;
 pub mod retention;
 
-pub use config::{CaptureMode, Codec, Config, Corner, GameConfig, Resolution};
+pub use config::{CaptureMode, Codec, Config, Corner, GameConfig, KillConfig, Resolution};
 pub use packet::{EncodedPacket, StreamId};
 pub use replay::{ReplayBuffer, ReplaySnapshot};
 

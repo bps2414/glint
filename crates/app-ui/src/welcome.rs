@@ -17,6 +17,7 @@ impl Shell {
         }
         let key = self.config.save_hotkey.clone();
         let secs = self.config.buffer_secs.to_string();
+        let kill_key = self.config.kill.hotkey.clone();
         let step = |n: &str, title: SharedString, body: SharedString| {
             div()
                 .flex()
@@ -99,7 +100,7 @@ impl Shell {
                         .child(step(
                             "2",
                             tr_args("welcome.step2_title", &[("key", &key)]),
-                            tr_args("welcome.step2", &[("secs", &secs)]),
+                            tr_args("welcome.step2", &[("secs", &secs), ("kill", &kill_key)]),
                         ))
                         .child(step("3", tr("welcome.step3_title"), tr("welcome.step3")))
                         .child(

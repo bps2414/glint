@@ -7,7 +7,7 @@ in the UI can cost frames in the game**, so recording and the interface are sepa
 
 | Binary | Crate | Role |
 |---|---|---|
-| `glint-recorder` | `app-recorder` | Headless daemon in the tray. Detects the game, captures, encodes, keeps the replay buffer, saves clips on F8, shows the optional Discord Rich Presence. Idle (EcoQoS) when no game is running. |
+| `glint-recorder` | `app-recorder` | Headless daemon in the tray. Detects the game, captures, encodes, keeps the replay buffer, saves clips on F8 and F9 (kill), shows the optional Discord Rich Presence. Idle (EcoQoS) when no game is running. |
 | `glint` | `app-ui` | The library, editor, player and settings (GPUI + gpui-component). Started on demand; when it closes, it is gone. During a match its cost is zero. |
 
 The two talk over a local socket (`app-ipc`: named pipe on Windows, Unix socket elsewhere) with typed
@@ -58,6 +58,16 @@ The buffer is a sliding window of **already-encoded packets** (default 60 s, 15-
 keyframe, so pressing F8 saves by **remuxing** to MP4, with no re-encode (~150 ms). A background saver then
 writes the thumbnail, records the clip in SQLite and applies the disk limit (oldest first; favorites and
 published clips are never deleted).
+
+**Kill clips** use a second hotkey (F9, `[kill]` in `config.toml`). Each press stamps `clock::now_us()` (QPC,
+the same clock as the packets) and plays a short tick; the daemon keeps one pending clip
+(`first_us`, `last_us`, `presses`, `deadline`). A press before the deadline extends it, so consecutive kills
+become one clip; the deadline is `max(combo_secs, post_secs)` after the last press. When it expires (or the
+session is about to be dropped) `ReplayBuffer::snapshot_range(first - pre, last + post)` is remuxed like any
+other clip and stored with `kind = kill` and the press count (x2, x3...). A combo that would outgrow the
+buffer is flushed and a new one started. The video starts at the keyframe before the requested start, so
+the clip can have up to one GOP (1 s) extra at the beginning. The two hotkeys register independently: a key
+taken by another app disables only itself.
 
 ## Player and editor
 

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Context, Result};
-use app_core::library::Library;
+use app_core::library::{ClipKind, Library};
 use app_core::{brand, Config};
 use app_ipc::{Client, RecorderState, Request, Response};
 use app_media::VideoSettings;
@@ -102,9 +102,12 @@ pub fn manual(args: &Args) -> Result<()> {
 
     let key = hotkey::parse(&cfg.save_hotkey)
         .ok_or_else(|| anyhow!("hotkey inválida na config: '{}'", cfg.save_hotkey))?;
-    let (_listener, hotkeys) = hotkey::HotkeyListener::start(vec![key]).context(
-        "registrando hotkey (o gravador da bandeja está aberto? feche com --quit ou pelo menu)",
-    )?;
+    let (_listener, hotkeys, status) = hotkey::HotkeyListener::start(vec![key])?;
+    if let Some(Err(e)) = status.into_iter().next() {
+        return Err(anyhow!(
+            "registrando hotkey (gravador da bandeja aberto? feche com --quit ou pelo menu): {e}"
+        ));
+    }
 
     let stop = Arc::new(AtomicBool::new(false));
     ctrlc::set_handler({
@@ -162,10 +165,14 @@ pub fn manual(args: &Args) -> Result<()> {
                     height: i.height,
                     fps: i.fps,
                     codec: i.codec,
+                    kind: ClipKind::Replay,
+                    kills: None,
+                    thumb_at_ms: None,
                 },
                 clips_dir: cfg.clips_dir(),
                 disk_limit_bytes: cfg.disk_limit_bytes(),
                 play_sound: cfg.save_sound,
+                error_sound: cfg.save_sound,
             });
         }
         if last_report.elapsed() >= Duration::from_secs(10) {
@@ -233,11 +240,14 @@ pub fn diagnose(args: &Args) -> Result<()> {
     }
     match hotkey::parse(&cfg.save_hotkey) {
         Some(k) => match hotkey::HotkeyListener::start(vec![k]) {
-            Ok(_) => println!("Hotkey:     {} OK", cfg.save_hotkey),
-            Err(e) => println!(
-                "Hotkey:     {} indisponível ({e}) — normal se o gravador da bandeja estiver aberto",
-                cfg.save_hotkey
-            ),
+            Ok((_, _, status)) => match &status[0] {
+                Ok(()) => println!("Hotkey:     {} OK", cfg.save_hotkey),
+                Err(e) => println!(
+                    "Hotkey:     {} indisponível ({e}); normal com a bandeja aberta",
+                    cfg.save_hotkey
+                ),
+            },
+            Err(e) => println!("Hotkey:     {} indisponível ({e})", cfg.save_hotkey),
         },
         None => println!("Hotkey:     '{}' inválida", cfg.save_hotkey),
     }
@@ -309,7 +319,7 @@ pub fn ipc(args: &Args) -> Result<()> {
                     s.buffer_bytes as f64 / 1e6
                 );
             }
-            println!("Hotkey:     {}", s.hotkey);
+            println!("Hotkey:     {} (kill: {})", s.hotkey, s.kill_hotkey);
             println!("Salvos:     {} nesta sessão", s.clips_saved);
             if let Some(c) = &s.last_clip {
                 println!("Último:     {c}");

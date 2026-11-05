@@ -1,3 +1,4 @@
+use app_core::library::ClipKind;
 use gpui_kit::*;
 
 use crate::app::Shell;
@@ -44,6 +45,7 @@ impl Shell {
             Filter::All => tr("library.title"),
             Filter::Favorites => tr("nav.favorites"),
             Filter::Published => tr("nav.published"),
+            Filter::Kills => tr("nav.kills"),
             Filter::Game(Some(g)) => g.clone().into(),
             Filter::Game(None) => tr("nav.screen"),
         }
@@ -191,6 +193,12 @@ impl Shell {
                 card.preview(p.surface_rounded(theme::R), t)
             }
             None => card,
+        };
+        // Selo "Kill" (ou "x2", "x3"... num combo) no canto de baixo da miniatura.
+        let card = match (c.kind, c.kills) {
+            (ClipKind::Kill, Some(n)) if n > 1 => card.kill(format!("x{n}")),
+            (ClipKind::Kill, _) => card.kill(tr("card.kill")),
+            _ => card,
         };
         if let Some(label) = self.upload_badge(id) {
             return card.badge(BadgeKind::Upload, label);

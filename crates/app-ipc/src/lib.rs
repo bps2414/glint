@@ -16,7 +16,7 @@ use interprocess::local_socket::{prelude::*, GenericNamespaced, ListenerOptions,
 use serde::{Deserialize, Serialize};
 
 /// Muda quando o formato das mensagens muda de forma incompatível.
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 
 /// Maior mensagem aceita (protege contra lixo no pipe).
 pub const MAX_FRAME: usize = 1 << 20;
@@ -54,6 +54,8 @@ pub enum Request {
     ReloadConfig,
     /// Encerra o gravador.
     Shutdown,
+    /// Mesmo efeito da hotkey de kill (um aperto).
+    SaveKill,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -94,6 +96,10 @@ pub struct RecorderStatus {
     pub clips_saved: u64,
     pub last_clip: Option<String>,
     pub hotkey: String,
+    /// A hotkey de salvar foi registrada (`false` = outro app já usa a tecla).
+    pub hotkey_ok: bool,
+    pub kill_hotkey: String,
+    pub kill_hotkey_ok: bool,
     pub disk_used_bytes: u64,
     pub disk_limit_bytes: u64,
 }
@@ -113,6 +119,9 @@ impl Default for RecorderStatus {
             clips_saved: 0,
             last_clip: None,
             hotkey: String::new(),
+            hotkey_ok: true,
+            kill_hotkey: String::new(),
+            kill_hotkey_ok: true,
             disk_used_bytes: 0,
             disk_limit_bytes: 0,
         }
@@ -368,6 +377,10 @@ mod tests {
             Response::Error(_)
         ));
         assert_eq!(c.request(&Request::SaveClip).unwrap(), Response::Ok);
+        assert!(matches!(
+            c.request(&Request::SaveKill).unwrap(),
+            Response::Error(_)
+        ));
         match c.request(&Request::Status).unwrap() {
             Response::Status(s) => {
                 assert_eq!(s.clips_saved, 1);

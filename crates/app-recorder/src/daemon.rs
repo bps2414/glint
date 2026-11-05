@@ -12,14 +12,15 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use app_core::game::{DetectorEvent, ForegroundSample, GameDetector};
-use app_core::{brand, CaptureMode, Config};
+use app_core::library::ClipKind;
+use app_core::{brand, CaptureMode, Config, ReplaySnapshot};
 use app_ipc::{RecorderState, RecorderStatus, Request, Response};
 use app_platform_win::capture::CaptureTarget;
 use app_platform_win::foreground::{self, GpuWatch, ProcessWatch};
 use app_platform_win::hotkey::{self, HotkeyListener};
 use app_platform_win::tray::{Tray, TrayCommand, TrayState};
 use app_platform_win::windows::Win32::Foundation::HWND;
-use app_platform_win::{autostart, instance, power, shell, sound, window};
+use app_platform_win::{autostart, clock, instance, power, shell, sound, window};
 use parking_lot::Mutex;
 use rust_i18n::t;
 
@@ -33,8 +34,13 @@ const TICK: Duration = Duration::from_secs(1);
 const GPU_ACTIVE_PERCENT: f64 = 1.0;
 const STATUS_LOG_EVERY: Duration = Duration::from_secs(30);
 
+/// Índices das hotkeys registradas (ordem de `Daemon::hotkey_ok`).
+const HOTKEY_SAVE: usize = 0;
+const HOTKEY_KILL: usize = 1;
+
 enum Event {
-    Hotkey,
+    /// Índice da hotkey apertada (`HOTKEY_SAVE` ou `HOTKEY_KILL`).
+    Hotkey(usize),
     Tray(TrayCommand),
     Ipc(Request, Sender<Response>),
     Saved(SaveOutcome),
@@ -115,7 +121,8 @@ pub fn run(autostart_launch: bool) -> Result<()> {
         saver,
         tray: None,
         hotkey: None,
-        hotkey_ok: false,
+        hotkey_ok: [false; 2],
+        pending_kill: None,
         status,
         clips_saved: 0,
         last_clip: None,
@@ -136,6 +143,16 @@ pub fn run(autostart_launch: bool) -> Result<()> {
     d.publish();
     d.run(rx);
     Ok(())
+}
+
+/// Clipe de kill esperando o fim da janela do combo para ser salvo.
+struct PendingKill {
+    /// Primeiro e último aperto (µs, relógio QPC dos pacotes).
+    first_us: i64,
+    last_us: i64,
+    presses: u32,
+    /// Quando o clipe fecha: último aperto + max(combo, pós-roll).
+    deadline: Instant,
 }
 
 struct Daemon {
@@ -160,7 +177,9 @@ struct Daemon {
     saver: Saver,
     tray: Option<Tray>,
     hotkey: Option<HotkeyListener>,
-    hotkey_ok: bool,
+    /// Por hotkey (`HOTKEY_SAVE`, `HOTKEY_KILL`): registrada de fato.
+    hotkey_ok: [bool; 2],
+    pending_kill: Option<PendingKill>,
     status: Arc<Mutex<RecorderStatus>>,
     clips_saved: u64,
     last_clip: Option<PathBuf>,
@@ -173,11 +192,23 @@ impl Daemon {
     fn run(&mut self, rx: Receiver<Event>) {
         let mut next_tick = Instant::now();
         while !self.quit {
-            let timeout = next_tick.saturating_duration_since(Instant::now());
+            // Acorda também no fim do combo, senão o TICK de 1 s atrasaria o salvamento.
+            let wake = match &self.pending_kill {
+                Some(p) => next_tick.min(p.deadline),
+                None => next_tick,
+            };
+            let timeout = wake.saturating_duration_since(Instant::now());
             match rx.recv_timeout(timeout) {
                 Ok(ev) => self.handle(ev),
                 Err(RecvTimeoutError::Timeout) => {}
                 Err(RecvTimeoutError::Disconnected) => break,
+            }
+            let kill_due = self
+                .pending_kill
+                .as_ref()
+                .is_some_and(|p| Instant::now() >= p.deadline);
+            if kill_due {
+                self.flush_kill();
             }
             if Instant::now() >= next_tick {
                 self.tick();
@@ -186,6 +217,7 @@ impl Daemon {
             self.publish();
         }
         tracing::info!("gravador encerrando");
+        self.flush_kill();
         if let Some((_, s)) = self.session.take() {
             s.stop();
         }
@@ -198,7 +230,8 @@ impl Daemon {
 
     fn handle(&mut self, ev: Event) {
         match ev {
-            Event::Hotkey => self.save_clip(),
+            Event::Hotkey(HOTKEY_KILL) => self.kill_press(),
+            Event::Hotkey(_) => self.save_clip(),
             Event::Tray(cmd) => self.tray_command(cmd),
             Event::Ipc(req, reply) => {
                 let resp = self.ipc(req);
@@ -227,6 +260,7 @@ impl Daemon {
     fn tray_command(&mut self, cmd: TrayCommand) {
         match cmd {
             TrayCommand::SaveClip => self.save_clip(),
+            TrayCommand::SaveKill => self.kill_press(),
             TrayCommand::OpenLibrary => self.open_library(),
             TrayCommand::OpenFolder => {
                 let dir = self.cfg.clips_dir();
@@ -262,6 +296,15 @@ impl Daemon {
                     Response::Error("nada gravando agora".into())
                 }
             }
+            Request::SaveKill => {
+                let recording = self.session.is_some();
+                self.kill_press();
+                if recording {
+                    Response::Ok
+                } else {
+                    Response::Error("nada gravando agora".into())
+                }
+            }
             Request::SetAutoDetect(on) => {
                 self.set_auto_detect(on);
                 Response::Ok
@@ -291,7 +334,7 @@ impl Daemon {
     // ------------------------------------------------------------ ações
 
     fn save_clip(&mut self) {
-        let Some((want, s)) = &self.session else {
+        let Some((_, s)) = &self.session else {
             tracing::info!("hotkey: nada gravando agora");
             if self.cfg.save_sound {
                 sound::play_error_blip();
@@ -306,6 +349,87 @@ impl Daemon {
             }
             return;
         }
+        self.queue_save(snapshot, ClipKind::Replay, None, None);
+    }
+
+    /// Aperto da hotkey de kill: abre um clipe pendente ou estende o que já está aberto.
+    /// O salvamento acontece quando a janela do combo fecha (`flush_kill`).
+    fn kill_press(&mut self) {
+        if self.session.is_none() {
+            tracing::info!("hotkey de kill: nada gravando agora");
+            if self.cfg.save_sound {
+                sound::play_error_blip();
+            }
+            return;
+        }
+        let now_us = clock::now_us();
+        let now = Instant::now();
+        let kill = &self.cfg.kill;
+        let (pre_us, post_us) = (secs_us(kill.pre_secs), secs_us(kill.post_secs));
+        // O clipe só fecha depois do pós-roll do último aperto, mesmo sem combo.
+        let hold = Duration::from_secs(u64::from(kill.combo_secs.max(kill.post_secs)));
+        let max_span_us = secs_us(self.cfg.buffer_secs);
+        // Estende se a janela ainda está aberta e o clipe cabe no buffer.
+        let extend = self.pending_kill.as_ref().is_some_and(|p| {
+            let fits = now_us + post_us - (p.first_us - pre_us) <= max_span_us;
+            now < p.deadline && fits
+        });
+        if extend {
+            if let Some(p) = self.pending_kill.as_mut() {
+                p.last_us = now_us;
+                p.presses += 1;
+                p.deadline = now + hold;
+            }
+        } else {
+            self.flush_kill();
+            self.pending_kill = Some(PendingKill {
+                first_us: now_us,
+                last_us: now_us,
+                presses: 1,
+                deadline: now + hold,
+            });
+        }
+        if self.cfg.save_sound {
+            sound::play_kill_tick();
+        }
+    }
+
+    /// Salva o clipe de kill pendente (se houver) com o que o buffer tem agora.
+    fn flush_kill(&mut self) {
+        let Some(p) = self.pending_kill.take() else {
+            return;
+        };
+        let Some((_, s)) = &self.session else {
+            return;
+        };
+        let start_us = p.first_us - secs_us(self.cfg.kill.pre_secs);
+        let end_us = p.last_us + secs_us(self.cfg.kill.post_secs);
+        let snapshot = s.snapshot_range(start_us, end_us);
+        if snapshot.is_empty() {
+            tracing::info!("clipe de kill: buffer vazio nesse trecho");
+            if self.cfg.save_sound {
+                sound::play_error_blip();
+            }
+            return;
+        }
+        // Miniatura no primeiro aperto (o vídeo começa no keyframe antes do pedido).
+        let thumb_at_ms = snapshot.start_us().map(|v0| (p.first_us - v0) / 1000);
+        tracing::info!(apertos = p.presses, "salvando clipe de kill");
+        self.queue_save(snapshot, ClipKind::Kill, Some(p.presses), thumb_at_ms);
+    }
+
+    /// Enfileira o salvamento de `snapshot` (da sessão atual). Clipe de kill não toca o blip ao
+    /// salvar (o salvamento vem segundos depois do último aperto); falha toca nos dois.
+    fn queue_save(
+        &self,
+        snapshot: ReplaySnapshot,
+        kind: ClipKind,
+        kills: Option<u32>,
+        thumb_at_ms: Option<i64>,
+    ) {
+        let Some((want, s)) = &self.session else {
+            return;
+        };
         let game = match want {
             Want::Game(_) => self.detector.current().cloned(),
             _ => None,
@@ -320,10 +444,14 @@ impl Daemon {
                 height: s.info.height,
                 fps: s.info.fps,
                 codec: s.info.codec,
+                kind,
+                kills,
+                thumb_at_ms,
             },
             clips_dir: self.cfg.clips_dir(),
             disk_limit_bytes: self.cfg.disk_limit_bytes(),
-            play_sound: self.cfg.save_sound,
+            play_sound: kind == ClipKind::Replay && self.cfg.save_sound,
+            error_sound: self.cfg.save_sound,
         });
     }
 
@@ -393,7 +521,8 @@ impl Daemon {
 
     fn reload_config(&mut self) -> std::result::Result<(), String> {
         let cfg = Config::load_or_create(&self.cfg_path).map_err(|e| e.to_string())?;
-        let hotkey_changed = cfg.save_hotkey != self.cfg.save_hotkey;
+        let hotkey_changed =
+            cfg.save_hotkey != self.cfg.save_hotkey || cfg.kill.hotkey != self.cfg.kill.hotkey;
         let auto = cfg.game.auto_detect;
         self.detector.set_config(&cfg.game);
         if cfg.discord_presence != self.cfg.discord_presence {
@@ -415,30 +544,58 @@ impl Daemon {
         Ok(())
     }
 
+    /// Registra as hotkeys de salvar e de kill, cada uma por conta própria: uma tecla ocupada
+    /// por outro app não derruba a outra.
     fn register_hotkey(&mut self) {
-        self.hotkey = None; // solta a anterior antes de registrar outra
-        self.hotkey_ok = false;
-        let Some(key) = hotkey::parse(&self.cfg.save_hotkey) else {
-            tracing::warn!("hotkey inválida na config: '{}'", self.cfg.save_hotkey);
+        self.hotkey = None; // solta as anteriores antes de registrar outras
+        self.hotkey_ok = [false; 2];
+        let specs = [self.cfg.save_hotkey.clone(), self.cfg.kill.hotkey.clone()];
+        // (índice da hotkey, tecla) das que valem registrar.
+        let mut slots: Vec<(usize, hotkey::Hotkey)> = Vec::new();
+        for (id, spec) in specs.iter().enumerate() {
+            let Some(key) = hotkey::parse(spec) else {
+                tracing::warn!("hotkey inválida na config: '{spec}'");
+                continue;
+            };
+            if slots.iter().any(|(_, k)| *k == key) {
+                tracing::warn!("hotkey '{spec}' repetida; vale só a de salvar clipe");
+                continue;
+            }
+            slots.push((id, key));
+        }
+        if slots.is_empty() {
             return;
-        };
-        match HotkeyListener::start(vec![key]) {
-            Ok((listener, events)) => {
+        }
+        let keys: Vec<hotkey::Hotkey> = slots.iter().map(|(_, k)| *k).collect();
+        match HotkeyListener::start(keys) {
+            Ok((listener, events, status)) => {
+                let ids: Vec<usize> = slots.iter().map(|(id, _)| *id).collect();
                 let tx = self.tx.clone();
                 let _ = std::thread::Builder::new()
                     .name("hotkey-fwd".into())
                     .spawn(move || {
-                        for _ in events {
-                            if tx.send(Event::Hotkey).is_err() {
+                        for pos in events {
+                            let Some(&id) = ids.get(pos) else {
+                                continue;
+                            };
+                            if tx.send(Event::Hotkey(id)).is_err() {
                                 break;
                             }
                         }
                     });
+                for ((id, _), st) in slots.iter().zip(status) {
+                    let spec = &specs[*id];
+                    match st {
+                        Ok(()) => {
+                            self.hotkey_ok[*id] = true;
+                            tracing::info!(hotkey = %spec, "hotkey registrada");
+                        }
+                        Err(e) => tracing::warn!("hotkey {spec}: {e}"),
+                    }
+                }
                 self.hotkey = Some(listener);
-                self.hotkey_ok = true;
-                tracing::info!(hotkey = %self.cfg.save_hotkey, "hotkey registrada");
             }
-            Err(e) => tracing::warn!("hotkey {}: {e}", self.cfg.save_hotkey),
+            Err(e) => tracing::warn!("hotkeys: {e}"),
         }
     }
 
@@ -571,6 +728,8 @@ impl Daemon {
         if self.session.as_ref().map(|(w, _)| *w) == Some(want) {
             return;
         }
+        // A sessão vai embora: salva o combo pendente com o que o buffer tem.
+        self.flush_kill();
         if let Some((_, s)) = self.session.take() {
             s.stop();
             power::set_process_eco(true);
@@ -646,6 +805,7 @@ impl Daemon {
             Health::Broken(why) => why,
         };
         tracing::warn!("gravação interrompida: {problem}; reabrindo");
+        self.flush_kill();
         if let Some((_, s)) = self.session.take() {
             s.stop();
         }
@@ -679,6 +839,9 @@ impl Daemon {
             clips_saved: self.clips_saved,
             last_clip: self.last_clip.as_ref().map(|p| p.display().to_string()),
             hotkey: self.cfg.save_hotkey.clone(),
+            hotkey_ok: self.hotkey_ok[HOTKEY_SAVE],
+            kill_hotkey: self.cfg.kill.hotkey.clone(),
+            kill_hotkey_ok: self.hotkey_ok[HOTKEY_KILL],
             disk_used_bytes: self.disk_used,
             disk_limit_bytes: self.cfg.disk_limit_bytes(),
             ..RecorderStatus::default()
@@ -699,6 +862,7 @@ impl Daemon {
     fn tray_state(&self) -> TrayState {
         let app = brand::APP_NAME;
         let key = self.cfg.save_hotkey.as_str();
+        let kill_key = self.cfg.kill.hotkey.as_str();
         let recording = self.session.is_some();
         let failed = !recording && self.last_error.is_some() && self.want() != Want::Nothing;
         let source = self.source_label().unwrap_or_default();
@@ -724,18 +888,28 @@ impl Daemon {
                 t!("tray.status_idle").to_string(),
             )
         };
-        if !self.hotkey_ok {
-            status = format!("{status} · {}", t!("tray.hotkey_busy", key = key));
+        for (ok, k) in [
+            (self.hotkey_ok[HOTKEY_SAVE], key),
+            (self.hotkey_ok[HOTKEY_KILL], kill_key),
+        ] {
+            if !ok {
+                status = format!("{status} · {}", t!("tray.hotkey_busy", key = k));
+            }
         }
         TrayState {
             tooltip: short(&tooltip, 120),
             status,
             recording,
             failed,
-            save_label: if self.hotkey_ok {
+            save_label: if self.hotkey_ok[HOTKEY_SAVE] {
                 t!("tray.save", key = key).to_string()
             } else {
                 t!("tray.save_nokey").to_string()
+            },
+            kill_label: if self.hotkey_ok[HOTKEY_KILL] {
+                t!("tray.kill", key = kill_key).to_string()
+            } else {
+                t!("tray.kill_nokey").to_string()
             },
             can_save: recording,
             manual_label: if recording {
@@ -769,6 +943,11 @@ fn game_window(pid: u32) -> Option<HWND> {
         .filter(|w| w.pid == pid)
         .max_by_key(|w| i64::from(w.width) * i64::from(w.height))
         .map(|w| w.hwnd)
+}
+
+/// Segundos → µs (mesma unidade dos timestamps dos pacotes).
+fn secs_us(secs: u32) -> i64 {
+    i64::from(secs) * 1_000_000
 }
 
 fn short(s: &str, max: usize) -> String {

@@ -197,6 +197,32 @@ impl ReplayBuffer {
             .collect();
         ReplaySnapshot { video, audio }
     }
+
+    /// Copia o trecho `[start_us, end_us]` (instantes no mesmo relógio dos pacotes).
+    /// O vídeo começa no último keyframe `<= start_us` (ou no primeiro pacote, se o buffer já
+    /// perdeu esse trecho) e termina no último pacote `<= end_us`; o áudio cobre o mesmo trecho.
+    pub fn snapshot_range(&self, start_us: i64, end_us: i64) -> ReplaySnapshot {
+        let first = self
+            .video
+            .iter()
+            .rposition(|p| p.keyframe && p.time_us <= start_us)
+            .unwrap_or(0);
+        let video: Vec<_> = self
+            .video
+            .iter()
+            .skip(first)
+            .take_while(|p| p.time_us <= end_us)
+            .cloned()
+            .collect();
+        let v_start = video.first().map(|p| p.time_us).unwrap_or(start_us);
+        let audio = self
+            .audio
+            .iter()
+            .filter(|p| (v_start..=end_us).contains(&p.time_us))
+            .cloned()
+            .collect();
+        ReplaySnapshot { video, audio }
+    }
 }
 
 #[cfg(test)]
@@ -284,6 +310,52 @@ mod tests {
         assert!((15_000_000 - FRAME_US..=16_000_000).contains(&d), "dur {d}");
         let v0 = snap.start_us().unwrap();
         assert!(snap.audio.iter().all(|p| p.time_us >= v0));
+    }
+
+    #[test]
+    fn snapshot_range_cuts_both_ends() {
+        let mut buf = ReplayBuffer::new(60, usize::MAX);
+        fill(&mut buf, 40, 60);
+        // 10 s a 14 s: começa no keyframe de até 1 s antes (GOP de 1 s) e termina em 14 s.
+        let snap = buf.snapshot_range(10_000_000, 14_000_000);
+        assert!(snap.video[0].keyframe);
+        let v0 = snap.start_us().unwrap();
+        assert!((9_000_000..=10_000_000).contains(&v0), "início {v0}");
+        let last = snap.video.last().unwrap().time_us;
+        assert!(
+            (14_000_000 - FRAME_US..=14_000_000).contains(&last),
+            "fim {last}"
+        );
+        let in_range = |p: &EncodedPacket| (v0..=14_000_000).contains(&p.time_us);
+        assert!(snap.audio.iter().all(in_range));
+        assert!(!snap.audio.is_empty());
+    }
+
+    #[test]
+    fn snapshot_range_starts_on_keyframe_before_start() {
+        let mut buf = ReplayBuffer::new(60, usize::MAX);
+        fill(&mut buf, 40, 60);
+        // 10,5 s cai no meio de um GOP: volta para o keyframe anterior.
+        let snap = buf.snapshot_range(10_500_000, 12_000_000);
+        assert!(snap.video[0].keyframe);
+        assert!(snap.start_us().unwrap() <= 10_500_000);
+        assert!(snap.start_us().unwrap() > 10_500_000 - 1_000_000 - FRAME_US);
+        let v0 = snap.start_us().unwrap();
+        assert!(snap.audio.iter().all(|p| p.time_us >= v0));
+    }
+
+    #[test]
+    fn snapshot_range_clamps_to_what_the_buffer_has() {
+        let mut buf = ReplayBuffer::new(10, usize::MAX);
+        fill(&mut buf, 30, 60);
+        let first = buf.video.front().unwrap().time_us;
+        let latest = buf.video.back().unwrap().time_us;
+        // Início já descartado e fim no futuro: devolve o buffer inteiro.
+        let snap = buf.snapshot_range(0, latest + 5_000_000);
+        assert_eq!(snap.start_us(), Some(first));
+        assert_eq!(snap.video.last().unwrap().time_us, latest);
+        // Intervalo fora do que existe: vazio.
+        assert!(buf.snapshot_range(0, first - 1).is_empty());
     }
 
     #[test]

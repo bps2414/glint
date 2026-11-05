@@ -5,7 +5,7 @@
 //! - [`convert::Converter`]: BGRA → NV12 + escala via D3D11 VideoProcessor.
 //! - [`audio`]: WASAPI loopback (sistema ou processo) e microfone.
 //! - [`hotkey`]: hotkeys globais (RegisterHotKey).
-//! - [`sound`]: "blip" de confirmação.
+//! - [`sound`]: "blip" de confirmação e "tick" do clipe de kill.
 //! - [`clock`]: relógio comum (QPC em µs) para vídeo e áudio.
 //! - [`foreground`]: janela em foco, processo vivo e uso de GPU (detecção de jogo).
 //! - [`tray`]: ícone na bandeja; [`tray_menu`]: o menu de vidro dela.

@@ -25,7 +25,7 @@ pub enum LibraryError {
 }
 
 /// Versão do esquema (`PRAGMA user_version`).
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 
 const MIGRATION_1: &str = "
 CREATE TABLE clips (
@@ -51,6 +51,40 @@ CREATE TABLE clips (
 CREATE INDEX clips_created ON clips(created_ms DESC);
 ";
 
+/// Clipe de kill: tipo (`replay` = F8) e quantos apertos do combo (`kills`).
+const MIGRATION_2: &str = "
+ALTER TABLE clips ADD COLUMN kind TEXT NOT NULL DEFAULT 'replay';
+ALTER TABLE clips ADD COLUMN kills INTEGER;
+";
+
+/// Uma migração por versão, em ordem (`MIGRATIONS[i]` leva o esquema para a versão `i + 1`).
+const MIGRATIONS: [&str; 2] = [MIGRATION_1, MIGRATION_2];
+
+/// De onde veio o clipe.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClipKind {
+    /// Últimos segundos do buffer (hotkey de salvar).
+    Replay,
+    /// Trecho em volta da jogada (hotkey de kill).
+    Kill,
+}
+
+impl ClipKind {
+    fn as_db(self) -> &'static str {
+        match self {
+            ClipKind::Replay => "replay",
+            ClipKind::Kill => "kill",
+        }
+    }
+
+    fn from_db(s: &str) -> Self {
+        match s {
+            "kill" => ClipKind::Kill,
+            _ => ClipKind::Replay,
+        }
+    }
+}
+
 /// Dados de um clipe recém-salvo.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NewClip {
@@ -66,6 +100,9 @@ pub struct NewClip {
     pub game: Option<String>,
     pub game_exe: Option<String>,
     pub thumb_path: Option<PathBuf>,
+    pub kind: ClipKind,
+    /// Apertos do combo (só clipes de kill).
+    pub kills: Option<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -88,6 +125,8 @@ pub struct Clip {
     pub published_url: Option<String>,
     pub trim_start_ms: Option<i64>,
     pub trim_end_ms: Option<i64>,
+    pub kind: ClipKind,
+    pub kills: Option<u32>,
 }
 
 impl Clip {
@@ -99,7 +138,7 @@ impl Clip {
 
 const CLIP_COLUMNS: &str = "id, path, created_ms, duration_ms, size_bytes, width, height, fps, \
      codec, audio_tracks, game, game_exe, title, thumb_path, favorite, published_url, \
-     trim_start_ms, trim_end_ms";
+     trim_start_ms, trim_end_ms, kind, kills";
 
 fn clip_from_row(r: &Row<'_>) -> rusqlite::Result<Clip> {
     Ok(Clip {
@@ -121,6 +160,8 @@ fn clip_from_row(r: &Row<'_>) -> rusqlite::Result<Clip> {
         published_url: r.get(15)?,
         trim_start_ms: r.get(16)?,
         trim_end_ms: r.get(17)?,
+        kind: ClipKind::from_db(&r.get::<_, String>(18)?),
+        kills: r.get(19)?,
     })
 }
 
@@ -154,11 +195,15 @@ impl Library {
 
     fn init(conn: Connection) -> Result<Self> {
         let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
-        // Uma migração por versão; hoje só existe a 1 (= SCHEMA_VERSION).
         if version < SCHEMA_VERSION {
-            conn.execute_batch(&format!(
-                "BEGIN; {MIGRATION_1} PRAGMA user_version = {SCHEMA_VERSION}; COMMIT;"
-            ))?;
+            for (i, sql) in MIGRATIONS.iter().enumerate() {
+                let to = i as i64 + 1;
+                if version < to {
+                    conn.execute_batch(&format!(
+                        "BEGIN; {sql} PRAGMA user_version = {to}; COMMIT;"
+                    ))?;
+                }
+            }
         }
         Ok(Self { conn })
     }
@@ -166,8 +211,8 @@ impl Library {
     pub fn insert(&self, c: &NewClip) -> Result<i64> {
         self.conn.execute(
             "INSERT INTO clips (path, created_ms, duration_ms, size_bytes, width, height, fps,
-                 codec, audio_tracks, game, game_exe, thumb_path)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                 codec, audio_tracks, game, game_exe, thumb_path, kind, kills)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 path_str(&c.path),
                 c.created_ms,
@@ -181,6 +226,8 @@ impl Library {
                 c.game,
                 c.game_exe,
                 c.thumb_path.as_deref().map(path_str),
+                c.kind.as_db(),
+                c.kills,
             ],
         )?;
         Ok(self.conn.last_insert_rowid())
@@ -313,6 +360,8 @@ mod tests {
             game: Some("VALORANT".into()),
             game_exe: Some("VALORANT-Win64-Shipping.exe".into()),
             thumb_path: Some(PathBuf::from(format!("/thumbs/{name}.jpg"))),
+            kind: ClipKind::Replay,
+            kills: None,
         }
     }
 
@@ -341,6 +390,50 @@ mod tests {
         assert!(lib.insert(&new_clip("a", 3000, 1)).is_err());
         lib.remove(b).unwrap();
         assert!(lib.get(b).unwrap().is_none());
+    }
+
+    #[test]
+    fn kill_clips_keep_kind_and_count() {
+        let lib = Library::open_in_memory().unwrap();
+        let replay = lib.insert(&new_clip("r", 1, 1)).unwrap();
+        let kill_clip = NewClip {
+            kind: ClipKind::Kill,
+            kills: Some(3),
+            ..new_clip("k", 2, 1)
+        };
+        let kill = lib.insert(&kill_clip).unwrap();
+        let r = lib.get(replay).unwrap().unwrap();
+        assert_eq!((r.kind, r.kills), (ClipKind::Replay, None));
+        let k = lib.get(kill).unwrap().unwrap();
+        assert_eq!((k.kind, k.kills), (ClipKind::Kill, Some(3)));
+    }
+
+    #[test]
+    fn upgrades_v1_database() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(&format!(
+            "{MIGRATION_1} PRAGMA user_version = 1;
+             INSERT INTO clips (path, created_ms, duration_ms, size_bytes, width, height, fps,
+                 codec, audio_tracks)
+             VALUES ('/clips/old.mp4', 1, 60000, 1000, 1920, 1080, 60, 'hevc', 2);"
+        ))
+        .unwrap();
+        let lib = Library::init(conn).unwrap();
+        let version: i64 = lib
+            .conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+        let all = lib.list().unwrap();
+        assert_eq!((all[0].kind, all[0].kills), (ClipKind::Replay, None));
+        // Banco migrado aceita clipes de kill.
+        let kill_clip = NewClip {
+            kind: ClipKind::Kill,
+            kills: Some(2),
+            ..new_clip("k", 2, 1)
+        };
+        lib.insert(&kill_clip).unwrap();
+        assert_eq!(lib.count().unwrap(), 2);
     }
 
     #[test]

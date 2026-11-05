@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use app_cloud::{login, Client};
-use app_core::{Config, Corner, Resolution};
+use app_core::{Config, Corner, KillConfig, Resolution};
 use app_ipc::Request;
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -37,6 +37,10 @@ const CORNER_KEYS: [&str; 4] = [
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Field {
     Hotkey,
+    KillHotkey,
+    KillPre,
+    KillPost,
+    KillCombo,
     Folder,
     Limit,
     Include,
@@ -46,6 +50,10 @@ enum Field {
 
 pub struct SettingsView {
     hotkey: Entity<InputState>,
+    kill_hotkey: Entity<InputState>,
+    kill_pre: Entity<InputState>,
+    kill_post: Entity<InputState>,
+    kill_combo: Entity<InputState>,
     folder: Entity<InputState>,
     limit: Entity<InputState>,
     include: Entity<InputState>,
@@ -54,6 +62,23 @@ pub struct SettingsView {
     /// Endereço do servidor recusado na última vez que o campo gravou.
     server_error: Option<SharedString>,
     login: Option<Arc<AtomicBool>>,
+}
+
+impl SettingsView {
+    fn input(&self, field: Field) -> &Entity<InputState> {
+        match field {
+            Field::Hotkey => &self.hotkey,
+            Field::KillHotkey => &self.kill_hotkey,
+            Field::KillPre => &self.kill_pre,
+            Field::KillPost => &self.kill_post,
+            Field::KillCombo => &self.kill_combo,
+            Field::Folder => &self.folder,
+            Field::Limit => &self.limit,
+            Field::Include => &self.include,
+            Field::Exclude => &self.exclude,
+            Field::Server => &self.server,
+        }
+    }
 }
 
 impl Shell {
@@ -74,6 +99,10 @@ impl Shell {
         };
         let view = SettingsView {
             hotkey: input(Field::Hotkey, c.save_hotkey.clone(), cx),
+            kill_hotkey: input(Field::KillHotkey, c.kill.hotkey.clone(), cx),
+            kill_pre: input(Field::KillPre, c.kill.pre_secs.to_string(), cx),
+            kill_post: input(Field::KillPost, c.kill.post_secs.to_string(), cx),
+            kill_combo: input(Field::KillCombo, c.kill.combo_secs.to_string(), cx),
             folder: input(Field::Folder, c.clips_dir().display().to_string(), cx),
             limit: input(Field::Limit, c.disk_limit_gb.to_string(), cx),
             include: input(Field::Include, c.game.include.join(", "), cx),
@@ -134,14 +163,7 @@ impl Shell {
         let Some(s) = self.settings.as_ref() else {
             return;
         };
-        let state = match field {
-            Field::Hotkey => &s.hotkey,
-            Field::Folder => &s.folder,
-            Field::Limit => &s.limit,
-            Field::Include => &s.include,
-            Field::Exclude => &s.exclude,
-            Field::Server => &s.server,
-        };
+        let state = s.input(field);
         let text = state.read(cx).value().trim().to_string();
         let list = |t: &str| -> Vec<String> {
             t.split([',', ';'])
@@ -151,7 +173,21 @@ impl Shell {
         };
         match field {
             Field::Hotkey if !text.is_empty() && text != self.config.save_hotkey => {
-                self.apply(|c| c.save_hotkey = text, cx)
+                if same_hotkey(&text, &self.config.kill.hotkey) {
+                    self.reject_hotkey(field, window, cx);
+                } else {
+                    self.apply(|c| c.save_hotkey = text, cx);
+                }
+            }
+            Field::KillHotkey if !text.is_empty() && text != self.config.kill.hotkey => {
+                if same_hotkey(&text, &self.config.save_hotkey) {
+                    self.reject_hotkey(field, window, cx);
+                } else {
+                    self.apply(|c| c.kill.hotkey = text, cx);
+                }
+            }
+            Field::KillPre | Field::KillPost | Field::KillCombo => {
+                self.save_kill_secs(field, &text, window, cx)
             }
             Field::Folder => {
                 let default = Config {
@@ -183,6 +219,59 @@ impl Shell {
             }
             Field::Server => self.save_server(&text, window, cx),
             _ => {}
+        }
+    }
+
+    /// Atalho igual ao do outro clipe: avisa e devolve ao campo o valor gravado.
+    fn reject_hotkey(&mut self, field: Field, window: &mut Window, cx: &mut Context<Self>) {
+        self.notify_user(tr("settings.kill_hotkey_same"), cx);
+        let current = match field {
+            Field::KillHotkey => self.config.kill.hotkey.clone(),
+            _ => self.config.save_hotkey.clone(),
+        };
+        if let Some(s) = self.settings.as_ref() {
+            s.input(field)
+                .update(cx, |i, cx| i.set_value(current, window, cx));
+        }
+    }
+
+    /// Grava um tempo do clipe de kill (dentro da faixa válida) e mostra no campo o valor que vale.
+    fn save_kill_secs(
+        &mut self,
+        field: Field,
+        text: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let k = &self.config.kill;
+        let (range, current) = match field {
+            Field::KillPre => (KillConfig::PRE_RANGE, k.pre_secs),
+            Field::KillPost => (KillConfig::POST_RANGE, k.post_secs),
+            _ => (KillConfig::COMBO_RANGE, k.combo_secs),
+        };
+        let n = match text.parse::<u32>() {
+            Ok(n) => n.clamp(range.0, range.1),
+            Err(_) => {
+                let (min, max) = (range.0.to_string(), range.1.to_string());
+                self.notify_user(
+                    tr_args(
+                        "settings.kill_secs_invalid",
+                        &[("min", &min), ("max", &max)],
+                    ),
+                    cx,
+                );
+                current
+            }
+        };
+        if n != current {
+            self.apply(|c| set_kill_secs(&mut c.kill, field, n), cx);
+        }
+        if let Some(s) = self.settings.as_ref() {
+            let shown = n.to_string();
+            let state = s.input(field);
+            if state.read(cx).value() != shown.as_str() {
+                state.update(cx, |i, cx| i.set_value(shown, window, cx));
+            }
         }
     }
 
@@ -418,6 +507,31 @@ impl Shell {
                 ],
             ))
             .child(section(
+                tr("settings.kill"),
+                vec![
+                    row(
+                        tr("settings.kill_hotkey"),
+                        Some(tr("settings.kill_hotkey_hint")),
+                        short_field(&s.kill_hotkey, 180.),
+                    ),
+                    row(
+                        tr("settings.kill_pre"),
+                        None,
+                        short_field(&s.kill_pre, 120.),
+                    ),
+                    row(
+                        tr("settings.kill_post"),
+                        None,
+                        short_field(&s.kill_post, 120.),
+                    ),
+                    row(
+                        tr("settings.kill_combo"),
+                        Some(tr("settings.kill_combo_hint")),
+                        short_field(&s.kill_combo, 120.),
+                    ),
+                ],
+            ))
+            .child(section(
                 tr("settings.audio"),
                 vec![
                     toggle(
@@ -565,6 +679,24 @@ impl Shell {
             .child(section(tr("settings.account"), vec![account]))
             .into_any_element()
     }
+}
+
+fn set_kill_secs(k: &mut KillConfig, field: Field, n: u32) {
+    match field {
+        Field::KillPre => k.pre_secs = n,
+        Field::KillPost => k.post_secs = n,
+        _ => k.combo_secs = n,
+    }
+}
+
+/// Mesma combinação de teclas, escrita de qualquer jeito ("ctrl+F9" = "F9+Ctrl").
+fn same_hotkey(a: &str, b: &str) -> bool {
+    let norm = |s: &str| {
+        let mut parts: Vec<String> = s.split('+').map(|p| p.trim().to_uppercase()).collect();
+        parts.sort();
+        parts
+    };
+    norm(a) == norm(b)
 }
 
 /// Endereço do servidor pronto para gravar: sem espaços nem barra no fim, com http(s)://.

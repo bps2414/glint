@@ -22,6 +22,8 @@ pub struct ClipCard {
     meta: SharedString,
     duration: SharedString,
     badge: Option<(BadgeKind, SharedString)>,
+    /// Selo de clipe de kill ("Kill", "x2"...), no canto de baixo à esquerda.
+    kill: Option<SharedString>,
     favorite: bool,
     hovered: bool,
     /// Selecionado (Ctrl+clique): anel em volta da miniatura.
@@ -54,6 +56,7 @@ impl ClipCard {
             meta: meta.into(),
             duration: duration.into(),
             badge: None,
+            kill: None,
             favorite: false,
             hovered: false,
             selected: false,
@@ -74,6 +77,11 @@ impl ClipCard {
 
     pub fn badge(mut self, kind: BadgeKind, label: impl Into<SharedString>) -> Self {
         self.badge = Some((kind, label.into()));
+        self
+    }
+
+    pub fn kill(mut self, label: impl Into<SharedString>) -> Self {
+        self.kill = Some(label.into());
         self
     }
 
@@ -182,6 +190,13 @@ impl RenderOnce for ClipCard {
             .when_some(self.badge, |d, (kind, label)| {
                 d.child(div().absolute().left(px(8.)).top(px(8.)).child(Badge {
                     kind,
+                    label,
+                    backdrop: backdrop.clone(),
+                }))
+            })
+            .when_some(self.kill, |d, label| {
+                d.child(div().absolute().left(px(8.)).bottom(px(8.)).child(Badge {
+                    kind: BadgeKind::Kill,
                     label,
                     backdrop: backdrop.clone(),
                 }))

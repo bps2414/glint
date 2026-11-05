@@ -25,10 +25,13 @@ pub fn sanitize(name: &str) -> String {
 }
 
 /// Nome sem extensão. `timestamp` já formatado (ex.: `2026-11-04_21-30-00`).
-pub fn clip_stem(game: Option<&str>, timestamp: &str) -> String {
+/// `kill`: clipe de kill (`Glint_VALORANT_Kill_<data>`).
+pub fn clip_stem(game: Option<&str>, kill: bool, timestamp: &str) -> String {
+    let prefix = brand::CLIP_FILE_PREFIX;
+    let kind = if kill { "_Kill" } else { "" };
     match game.map(sanitize).filter(|g| !g.is_empty()) {
-        Some(g) => format!("{}_{g}_{timestamp}", brand::CLIP_FILE_PREFIX),
-        None => format!("{}_{timestamp}", brand::CLIP_FILE_PREFIX),
+        Some(g) => format!("{prefix}_{g}{kind}_{timestamp}"),
+        None => format!("{prefix}{kind}_{timestamp}"),
     }
 }
 
@@ -61,11 +64,22 @@ mod tests {
     fn stems() {
         let p = brand::CLIP_FILE_PREFIX;
         assert_eq!(
-            clip_stem(Some("VALORANT"), "2026-11-04_21-30-00"),
+            clip_stem(Some("VALORANT"), false, "2026-11-04_21-30-00"),
             format!("{p}_VALORANT_2026-11-04_21-30-00")
         );
-        assert_eq!(clip_stem(Some("???"), "t"), format!("{p}_t"));
-        assert_eq!(clip_stem(None, "t"), format!("{p}_t"));
+        assert_eq!(clip_stem(Some("???"), false, "t"), format!("{p}_t"));
+        assert_eq!(clip_stem(None, false, "t"), format!("{p}_t"));
+    }
+
+    #[test]
+    fn kill_stems() {
+        let p = brand::CLIP_FILE_PREFIX;
+        assert_eq!(
+            clip_stem(Some("VALORANT"), true, "2026-11-04_21-30-00"),
+            format!("{p}_VALORANT_Kill_2026-11-04_21-30-00")
+        );
+        assert_eq!(clip_stem(Some("???"), true, "t"), format!("{p}_Kill_t"));
+        assert_eq!(clip_stem(None, true, "t"), format!("{p}_Kill_t"));
     }
 
     #[test]

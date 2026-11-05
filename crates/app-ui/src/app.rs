@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use app_core::library::ClipKind;
 use app_core::{brand, Config};
 use app_ipc::RecorderStatus;
 use app_media::{HwPreference, Player};
@@ -363,6 +364,7 @@ impl Shell {
         let total = clips.len() as u32;
         let fav = clips.iter().filter(|c| c.favorite).count() as u32;
         let publ = clips.iter().filter(|c| c.published_url.is_some()).count() as u32;
+        let kills = clips.iter().filter(|c| c.kind == ClipKind::Kill).count() as u32;
         let games = data::games(clips);
         let used = self.store.total_bytes();
         let limit = self.config.disk_limit_bytes();
@@ -431,6 +433,13 @@ impl Shell {
                         tr("nav.published"),
                         publ,
                         Filter::Published,
+                    ))
+                    .child(nav(
+                        "nav-kills",
+                        icon::GAMEPAD,
+                        tr("nav.kills"),
+                        kills,
+                        Filter::Kills,
                     )),
             )
             .when(!games.is_empty(), |d| {

@@ -157,6 +157,46 @@ impl Corner {
     ];
 }
 
+/// Clipe de kill: hotkey própria que salva um trecho curto em volta da jogada.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct KillConfig {
+    /// Hotkey do clipe de kill (ex.: "F9"). Só teclado.
+    pub hotkey: String,
+    /// Segundos antes do aperto (3-30).
+    pub pre_secs: u32,
+    /// Segundos depois do último aperto (0-10).
+    pub post_secs: u32,
+    /// Janela em que um novo aperto estende o mesmo clipe (0-15; 0 = sem combo).
+    pub combo_secs: u32,
+}
+
+impl KillConfig {
+    pub const PRE_RANGE: (u32, u32) = (3, 30);
+    pub const POST_RANGE: (u32, u32) = (0, 10);
+    pub const COMBO_RANGE: (u32, u32) = (0, 15);
+
+    /// Leva os tempos para as faixas válidas.
+    pub fn clamp(&mut self) {
+        self.pre_secs = self.pre_secs.clamp(Self::PRE_RANGE.0, Self::PRE_RANGE.1);
+        self.post_secs = self.post_secs.clamp(Self::POST_RANGE.0, Self::POST_RANGE.1);
+        self.combo_secs = self
+            .combo_secs
+            .clamp(Self::COMBO_RANGE.0, Self::COMBO_RANGE.1);
+    }
+}
+
+impl Default for KillConfig {
+    fn default() -> Self {
+        Self {
+            hotkey: "F9".into(),
+            pre_secs: 8,
+            post_secs: 2,
+            combo_secs: 6,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -191,6 +231,7 @@ pub struct Config {
     pub video: VideoConfig,
     pub audio: AudioConfig,
     pub game: GameConfig,
+    pub kill: KillConfig,
 }
 
 impl Default for Config {
@@ -212,6 +253,7 @@ impl Default for Config {
             video: VideoConfig::default(),
             audio: AudioConfig::default(),
             game: GameConfig::default(),
+            kill: KillConfig::default(),
         }
     }
 }
@@ -278,10 +320,14 @@ impl Config {
     /// Carrega a config; se não existir, cria com os padrões.
     pub fn load_or_create(path: &Path) -> Result<Self, ConfigError> {
         match std::fs::read_to_string(path) {
-            Ok(text) => toml::from_str(&text).map_err(|source| ConfigError::Parse {
-                path: path.to_path_buf(),
-                source,
-            }),
+            Ok(text) => {
+                let mut cfg: Self = toml::from_str(&text).map_err(|source| ConfigError::Parse {
+                    path: path.to_path_buf(),
+                    source,
+                })?;
+                cfg.kill.clamp();
+                Ok(cfg)
+            }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 let cfg = Self::default();
                 cfg.save(path)?;
@@ -342,6 +388,32 @@ mod tests {
             toml::from_str("watermark = true\nwatermark_corner = \"top_left\"\n").unwrap();
         assert!(mark.watermark);
         assert_eq!(mark.watermark_corner, Corner::TopLeft);
+
+        // Config antiga (sem [kill]): F9 e tempos padrão.
+        assert_eq!(partial.kill, KillConfig::default());
+        assert_eq!(partial.kill.hotkey, "F9");
+        let kill: Config = toml::from_str("[kill]\nhotkey = \"F10\"\npre_secs = 12\n").unwrap();
+        assert_eq!(kill.kill.hotkey, "F10");
+        assert_eq!(kill.kill.pre_secs, 12);
+        assert_eq!(kill.kill.post_secs, 2);
+        assert_eq!(kill.kill.combo_secs, 6);
+    }
+
+    #[test]
+    fn kill_times_are_clamped() {
+        let mut k = KillConfig {
+            hotkey: "F9".into(),
+            pre_secs: 1,
+            post_secs: 99,
+            combo_secs: 99,
+        };
+        k.clamp();
+        assert_eq!((k.pre_secs, k.post_secs, k.combo_secs), (3, 10, 15));
+        k.pre_secs = 100;
+        k.post_secs = 0;
+        k.combo_secs = 0;
+        k.clamp();
+        assert_eq!((k.pre_secs, k.post_secs, k.combo_secs), (30, 0, 0));
     }
 
     #[test]

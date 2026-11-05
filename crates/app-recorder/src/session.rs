@@ -180,6 +180,11 @@ impl Session {
         self.buffer.lock().snapshot(Some(secs))
     }
 
+    /// Trecho `[start_us, end_us]` do buffer (instantes no relógio QPC de `clock::now_us`).
+    pub fn snapshot_range(&self, start_us: i64, end_us: i64) -> ReplaySnapshot {
+        self.buffer.lock().snapshot_range(start_us, end_us)
+    }
+
     /// (segundos de vídeo, bytes) no buffer.
     pub fn buffer_usage(&self) -> (f32, u64) {
         let b = self.buffer.lock();

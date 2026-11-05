@@ -1,4 +1,4 @@
-//! "Blip" de confirmação ao salvar um clipe (sem overlay no jogo).
+//! "Blip" de confirmação ao salvar um clipe e "tick" do aperto de kill (sem overlay no jogo).
 
 use std::sync::OnceLock;
 
@@ -47,6 +47,12 @@ fn blip_wav() -> &'static [u8] {
     WAV.get_or_init(|| tones_wav(&[(880.0, 55), (1320.0, 70)]))
 }
 
+/// Um toque curto e agudo: apertou a hotkey de kill (o clipe só é salvo depois do combo).
+fn tick_wav() -> &'static [u8] {
+    static WAV: OnceLock<Vec<u8>> = OnceLock::new();
+    WAV.get_or_init(|| tones_wav(&[(1760.0, 40)]))
+}
+
 /// Dois tons graves descendentes: nada foi salvo (não está gravando ou falhou).
 fn error_wav() -> &'static [u8] {
     static WAV: OnceLock<Vec<u8>> = OnceLock::new();
@@ -55,6 +61,10 @@ fn error_wav() -> &'static [u8] {
 
 pub fn play_save_blip() {
     play(blip_wav());
+}
+
+pub fn play_kill_tick() {
+    play(tick_wav());
 }
 
 pub fn play_error_blip() {

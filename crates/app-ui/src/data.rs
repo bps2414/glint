@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use app_core::library::{Clip, Library};
+use app_core::library::{Clip, ClipKind, Library};
 use app_core::Config;
 use chrono::NaiveDate;
 
@@ -15,6 +15,8 @@ pub enum Filter {
     All,
     Favorites,
     Published,
+    /// Clipes feitos com a hotkey de kill.
+    Kills,
     /// Nome do jogo; `None` = clipes sem jogo (gravação da tela).
     Game(Option<String>),
 }
@@ -25,6 +27,7 @@ impl Filter {
             Filter::All => true,
             Filter::Favorites => c.favorite,
             Filter::Published => c.published_url.is_some(),
+            Filter::Kills => c.kind == ClipKind::Kill,
             Filter::Game(g) => c.game.as_deref() == g.as_deref(),
         }
     }
@@ -259,7 +262,7 @@ fn remove_file(p: &Path) -> Result<(), String> {
 mod tests {
     use std::path::PathBuf;
 
-    use app_core::library::NewClip;
+    use app_core::library::{ClipKind, NewClip};
 
     use super::*;
 
@@ -283,6 +286,8 @@ mod tests {
             published_url: None,
             trim_start_ms: None,
             trim_end_ms: None,
+            kind: ClipKind::Replay,
+            kills: None,
         }
     }
 
@@ -295,6 +300,8 @@ mod tests {
         ];
         v[2].favorite = true;
         v[0].published_url = Some("https://x/c/1".into());
+        v[1].kind = ClipKind::Kill;
+        v[1].kills = Some(2);
         v
     }
 
@@ -310,6 +317,7 @@ mod tests {
         assert_eq!(ids(Filter::All), vec![4, 2, 3, 1]);
         assert_eq!(ids(Filter::Favorites), vec![3]);
         assert_eq!(ids(Filter::Published), vec![1]);
+        assert_eq!(ids(Filter::Kills), vec![2]);
         assert_eq!(ids(Filter::Game(Some("VALORANT".into()))), vec![2, 1]);
         assert_eq!(ids(Filter::Game(None)), vec![4]);
     }
@@ -380,6 +388,8 @@ mod tests {
                 game: None,
                 game_exe: None,
                 thumb_path: None,
+                kind: ClipKind::Replay,
+                kills: None,
             })
             .unwrap();
         s.reload();

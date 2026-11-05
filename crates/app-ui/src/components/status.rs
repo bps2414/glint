@@ -111,6 +111,8 @@ pub enum BadgeKind {
     Published,
     /// Na fila de publicação ou enviando.
     Upload,
+    /// Clipe de kill ("Kill", "x2"...): só texto.
+    Kill,
 }
 
 /// Selo sobre a miniatura.
@@ -131,7 +133,7 @@ impl RenderOnce for Badge {
                     .border_color(tok::on_media())
                     .text_color(rgba(0x111114ff))
             })
-            .when(!new, |d| {
+            .when(!new && self.kind != BadgeKind::Kill, |d| {
                 d.child(
                     svg()
                         .path(if self.kind == BadgeKind::Upload {

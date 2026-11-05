@@ -35,6 +35,8 @@ const WM_SHOW_MENU: u32 = WM_APP + 1;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TrayCommand {
     SaveClip,
+    /// Clipe de kill (mesmo efeito de apertar a hotkey de kill).
+    SaveKill,
     OpenLibrary,
     OpenFolder,
     ToggleAutoDetect,
@@ -54,6 +56,7 @@ pub struct TrayState {
     /// Sessão com falha/backoff (selo vermelho no ícone).
     pub failed: bool,
     pub save_label: String,
+    pub kill_label: String,
     pub can_save: bool,
     pub manual_label: String,
     pub auto_detect_label: String,
@@ -248,6 +251,13 @@ fn model(s: &TrayState) -> MenuModel {
         recording: s.recording,
         entries: vec![
             item(&s.save_label, s.can_save, None, TrayCommand::SaveClip, true),
+            item(
+                &s.kill_label,
+                s.can_save,
+                None,
+                TrayCommand::SaveKill,
+                false,
+            ),
             item(
                 &s.manual_label,
                 true,

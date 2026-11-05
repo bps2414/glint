@@ -33,6 +33,8 @@ guarda o lance quando você aperta F8 e transforma o clipe num link que toca dir
 ## Recursos
 
 - **Replay sempre pronto:** os últimos 60 s (15 a 120 s) ficam na memória; F8 salva em ~150 ms.
+- **Clipes de kill:** F9 logo depois de uma kill salva um clipe curto em volta dela (8 s antes, 2 s depois por
+  padrão); apertar de novo em até 6 s junta a próxima kill no mesmo clipe (marcado x2, x3...).
 - **Leve:** captura e codificação na GPU (AMD AMF, NVIDIA NVENC, Intel QSV), HEVC 1080p60; o gravador
   usa ~1% de CPU e some sozinho quando o jogo fecha.
 - **Detecta o jogo sozinho:** qualquer jogo em tela cheia usando a GPU; listas de sempre/nunca gravar.
@@ -84,6 +86,7 @@ Passo a passo (app no Discord, segredos, limites): [`docs/DEPLOY.md`](docs/DEPLO
 | Ação | Como |
 |---|---|
 | Salvar o lance | **F8** (o atalho muda em Configurações) |
+| Salvar uma kill | **F9** (o atalho muda em Configurações); aperte de novo na janela do combo para estender o clipe |
 | Abrir a biblioteca | clique no ícone da bandeja ou abra o Glint |
 | Recortar | arraste as alças na linha do tempo; o recorte fica salvo |
 | Trocar de clipe / tocar / tela cheia | ← → / Espaço / F |

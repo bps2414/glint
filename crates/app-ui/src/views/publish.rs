@@ -1385,7 +1385,7 @@ fn hint(text: SharedString) -> Div {
 #[cfg(test)]
 mod tests {
     use super::publish_title;
-    use app_core::library::Clip;
+    use app_core::library::{Clip, ClipKind};
 
     #[test]
     fn titulo_publicado() {
@@ -1409,6 +1409,8 @@ mod tests {
             published_url: None,
             trim_start_ms: None,
             trim_end_ms: None,
+            kind: ClipKind::Replay,
+            kills: None,
         };
         assert_eq!(publish_title(&c), "VALORANT");
         c.title = Some("Ace".into());

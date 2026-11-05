@@ -11,6 +11,8 @@ tray:
   hotkey_busy: "%{key} unavailable (used by another app?)"
   save: "Save clip now (%{key})"
   save_nokey: "Save clip now"
+  kill: "Save kill (%{key})"
+  kill_nokey: "Save kill"
   record_screen: "Record the screen now"
   stop: "Stop recording"
   auto_detect: "Record games automatically"
