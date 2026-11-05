@@ -1,0 +1,43 @@
+// Worker do backend: página do clipe, vídeo (R2), login Discord + convite, API do app.
+// Deploy: botão "Deploy to Cloudflare" (cria D1/R2 a partir deste arquivo e pede os segredos de
+// .dev.vars.example) ou scripts/deploy.mjs (cria D1/R2 se faltarem, migra, sobe segredos e publica).
+// Guia: docs/DEPLOY.md.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Nome do Worker separado da marca (a marca fica em src/brand.ts): a URL é
+  // clips.<subdomínio da conta>.workers.dev (conta "glint" → clips.getglint.workers.dev).
+  "name": "clips",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": { "directory": "./public" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "glint",
+      // Preenchido pelo botão de deploy ou pelo scripts/deploy.mjs (num arquivo gerado, não aqui).
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "glint-clips" }],
+  // Faxina diária: uploads abandonados, sessões vencidas, contadores de rate limit.
+  "triggers": { "crons": ["23 6 * * *"] },
+  "vars": {
+    // Portão de convite depois do login Discord. "false" = qualquer conta Discord entra.
+    "INVITE_REQUIRED": "true",
+    // IDs Discord (separados por vírgula) que viram admin e não precisam de convite.
+    // Vazio: o primeiro login de um servidor sem usuários vira admin.
+    "ADMIN_DISCORD_IDS": "",
+    "DISCORD_CLIENT_ID": "",
+    // Cota por usuário em GB. 0 = sem cota por usuário.
+    "USER_QUOTA_GB": "0",
+    // Trava global em GB: a soma de todos os clipes não passa disso (o plano grátis do R2 tem 10 GB).
+    "STORAGE_LIMIT_GB": "9.5",
+    "MAX_CLIP_MB": "500",
+    // Língua das páginas e mensagens da API: "en" ou "pt-BR".
+    "SERVER_LANG": "en"
+  },
+  "observability": { "enabled": true }
+}

@@ -1,0 +1,12 @@
+// Redirect do endereço antigo para o novo (Fase 5). Fica na conta Cloudflare ANTIGA, com o
+// nome do Worker antigo ("clipe"), e substitui o Worker de lá. Só publicar depois de conferir
+// que o novo endereço está no ar com os dados migrados.
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "clipe",
+  "main": "index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "vars": { "TARGET": "https://clips.getglint.workers.dev" }
+}

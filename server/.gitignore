@@ -1,0 +1,9 @@
+node_modules/
+.wrangler/
+.dev.vars
+worker-configuration.d.ts
+wrangler.deploy.jsonc
+# As fontes ficam versionadas (o botão "Deploy to Cloudflare" só enxerga server/); estas sobras não são usadas.
+public/static/fonts/Geist-*
+.deploy-secrets.json
+.migrate/

@@ -1,0 +1,50 @@
+{
+  "name": "app-server",
+  "private": true,
+  "license": "MIT OR Apache-2.0",
+  "type": "module",
+  "cloudflare": {
+    "bindings": {
+      "DISCORD_CLIENT_ID": {
+        "description": "**Application ID** of the app you created in the [Discord Developer Portal](https://discord.com/developers/applications) (General Information). After the deploy, add `https://<your-worker>.workers.dev/auth/discord/callback` under OAuth2 → Redirects."
+      },
+      "DISCORD_CLIENT_SECRET": {
+        "description": "**Client Secret** of the same Discord app (Developer Portal → OAuth2)."
+      },
+      "SIGNING_KEY": {
+        "description": "Random string of 32+ characters used to sign links to private clips. Generate one with `openssl rand -base64 32`."
+      },
+      "ADMIN_DISCORD_IDS": {
+        "description": "Optional. Comma-separated Discord user IDs that are admins. Leave empty: the first login on the server becomes the admin."
+      },
+      "STORAGE_LIMIT_GB": {
+        "description": "Global limit in GB: the server refuses new clips once all clips together would pass it. R2's free tier is 10 GB; default 9.5."
+      },
+      "USER_QUOTA_GB": {
+        "description": "Optional. Per-user quota in GB. `0` means no per-user quota."
+      },
+      "INVITE_REQUIRED": {
+        "description": "`true`: only people with an invite can sign up (the very first login is the exception). `false`: any Discord account can sign up."
+      }
+    }
+  },
+  "scripts": {
+    "fonts": "node scripts/fonts.mjs",
+    "predev": "node scripts/fonts.mjs",
+    "dev": "wrangler dev",
+    "types": "wrangler types --include-env=false",
+    "typecheck": "wrangler types --include-env=false && tsc --noEmit",
+    "test": "vitest run",
+    "deploy": "node scripts/deploy.mjs"
+  },
+  "dependencies": {
+    "hono": "4.13.13",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.4.6",
+    "typescript": "5.9.3",
+    "vitest": "4.1.12",
+    "wrangler": "4.151.3"
+  }
+}

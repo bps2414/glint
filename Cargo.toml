@@ -1,0 +1,45 @@
+[workspace]
+resolver = "2"
+members = ["crates/*", "tools/*"]
+
+[workspace.package]
+version = "1.0.0-rc.1"
+edition = "2021"
+rust-version = "1.85"
+publish = false
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/bps2414/glint"
+
+[workspace.dependencies]
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-appender = "0.2"
+serde = { version = "1", features = ["derive"] }
+toml = "0.9"
+directories = "6"
+parking_lot = "0.12"
+crossbeam-channel = "0.5"
+ffmpeg-sys-next = { version = "9", default-features = false, features = ["avcodec", "avformat", "swresample", "swscale"] }
+windows = "0.62"
+app-core = { path = "crates/app-core" }
+app-media = { path = "crates/app-media" }
+app-platform-win = { path = "crates/app-platform-win" }
+app-ipc = { path = "crates/app-ipc" }
+app-cloud = { path = "crates/app-cloud" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+panic = "unwind"
+
+[profile.dev.package."*"]
+opt-level = 2
+
+# Build scripts/proc-macros otimizados também no release: sem isso o bindgen do
+# ffmpeg-sys-next roda sem otimização e estoura a pilha de 1 MB da thread
+# principal no Windows (STATUS_STACK_OVERFLOW no CI).
+[profile.release.build-override]
+opt-level = 2

@@ -1,0 +1,43 @@
+[package]
+name = "app-ui"
+description = "Interface do app (GPUI + gpui-component, via gpui-kit)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+sys-locale = "0.3"
+app-core.workspace = true
+app-media.workspace = true
+app-ipc.workspace = true
+app-cloud.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+# gpui-kit fixa a versão do GPUI (gpui-pre =0.3.11) e reexporta gpui + gpui-component.
+gpui-kit = "=0.9.0"
+rust-i18n = "4"
+# Mesmas versões que o GPUI já usa (não aumentam a árvore de dependências; o GPUI já liga o jpeg).
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+# og:image do link (mesma versão que o GPUI já usa pelo resvg).
+tiny-skia = "0.11.4"
+# Marca d'água da exportação (wordmark SVG → RGBA); mesma versão que o gpui-component já usa.
+resvg = { version = "=0.45.1", default-features = false }
+# Datas locais da biblioteca (mesma versão do gravador).
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+# Som do player (WASAPI no Windows, ALSA no Linux): multiplataforma, fica fora do app-platform-*.
+cpal = "0.18"
+
+[build-dependencies]
+# Ícone e versão no .exe (Windows); fora do Windows não faz nada.
+embed-resource = "=3.0.12"
+
+[target.'cfg(windows)'.dependencies]
+# CPU e memória do processo no modo de teste do player.
+app-platform-win.workspace = true
+
+# Nome do executável (único lugar além de brand.rs a mudar ao renomear o app).
+[[bin]]
+name = "glint"
+path = "src/main.rs"

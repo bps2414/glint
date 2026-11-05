@@ -1,0 +1,19 @@
+[package]
+name = "app-cloud"
+description = "Cliente do servidor (docs/API.md): login loopback + PKCE, publicar em partes, gerenciar clipes."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+serde_json = "1"
+# Cliente HTTP bloqueante (roda em thread de fundo); TLS por rustls.
+ureq = { version = "3", features = ["json"] }
+sha2 = "0.10"
+base64 = "0.22"
+getrandom = "0.3"

@@ -1,0 +1,126 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/wordmark-escuro.svg">
+    <img alt="Glint" src="docs/brand/wordmark-claro.svg" height="64">
+  </picture>
+</p>
+
+<p align="center"><b>Clipes de jogo leves no Windows.</b> F8 salva os últimos 60 segundos; um clique publica com player no Discord.</p>
+
+<p align="center">
+  <a href="README.md">English</a> ·
+  <a href="#instalação">Instalação</a> ·
+  <a href="#links-para-compartilhar-servidor-opcional">Links</a> ·
+  <a href="#perguntas-frequentes">Perguntas</a> ·
+  <a href="docs/ARCHITECTURE.md">Arquitetura</a> ·
+  <a href="docs/brand/README.md">Marca</a>
+</p>
+
+<p align="center">
+  <img alt="Windows 10/11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-111114?style=flat-square">
+  <img alt="Rust" src="https://img.shields.io/badge/feito%20em-Rust-111114?style=flat-square">
+  <img alt="Licença" src="https://img.shields.io/badge/licen%C3%A7a-MIT%20%7C%20Apache--2.0-111114?style=flat-square">
+</p>
+
+<p align="center"><img alt="Biblioteca do Glint" src="docs/brand/print-biblioteca.png" width="900"></p>
+
+## Por que
+
+Os apps de clipe mais conhecidos fazem o que prometem, mas vêm com feed, anúncios, conta obrigatória e
+um peso que aparece no FPS. O Glint faz só a parte boa: grava em segundo plano sem atrapalhar o jogo,
+guarda o lance quando você aperta F8 e transforma o clipe num link que toca direto no Discord.
+
+## Recursos
+
+- **Replay sempre pronto:** os últimos 60 s (15 a 120 s) ficam na memória; F8 salva em ~150 ms.
+- **Leve:** captura e codificação na GPU (AMD AMF, NVIDIA NVENC, Intel QSV), HEVC 1080p60; o gravador
+  usa ~1% de CPU e some sozinho quando o jogo fecha.
+- **Detecta o jogo sozinho:** qualquer jogo em tela cheia usando a GPU; listas de sempre/nunca gravar.
+- **Som do jogo e microfone em trilhas separadas:** ligue e desligue cada uma no player e no envio.
+- **Biblioteca e editor:** grade por dia, favoritos, busca sem acento, recorte com alças e prévia na
+  hora, tela cheia.
+- **Publicar e copiar link:** exporta só o trecho em H.264, envia em partes (retoma se cair) e o link
+  abre com player no Discord. Quem pode ver: só eu, com o link ou público. Selecione vários clipes para
+  enfileirar; o envio pausa enquanto há um jogo aberto.
+- **Exportar MP4:** salva o trecho recortado no disco, sem publicar nada.
+- **Marca d'água opcional:** desligada por padrão; quando ligada, aparece só nas exportações e nas cópias
+  publicadas, nunca no clipe original.
+- **Visual de vidro** que segue o tema claro/escuro do Windows e fica sólido com "Efeitos de
+  transparência" desligados ou em economia de bateria.
+- **Sem nada dentro do jogo:** não injeta, não lê memória, não desenha overlay. Seguro com anti-cheat
+  como o Vanguard.
+
+## Instalação
+
+1. Baixe o instalador mais recente em [GitHub Releases](https://github.com/bps2414/glint/releases/latest)
+   e execute (instala só para o seu usuário, sem pedir administrador).
+2. O gravador sobe na bandeja e fica esperando um jogo. Clique no ícone da bandeja, ou abra o Glint, para
+   ver a biblioteca.
+3. Opcional: Configurações → Sistema → **Iniciar com o Windows**. As atualizações são oferecidas dentro do
+   app.
+
+**Aviso do SmartScreen.** O instalador ainda não tem assinatura de código, então o Windows pode mostrar
+"O Windows protegeu o computador". Clique em **Mais informações → Executar assim mesmo**. O código está
+aqui e os releases são gerados pelo CI a partir de tags; a assinatura está nos planos.
+
+## Links para compartilhar (servidor opcional)
+
+O Glint funciona 100% local, sem conta e sem servidor: gravar, recortar, exportar MP4.
+
+Para ter um link que toca no Discord, você sobe o seu próprio servidor pequeno no plano grátis da
+Cloudflare (um Worker com D1 e R2). Não existe servidor compartilhado: cada pessoa ou grupo faz o seu
+deploy e cola a URL em Configurações → Servidor (até lá o botão Publicar mostra "Conectar servidor"). O
+login é só pelo Discord; quem entrar primeiro num servidor novo vira admin e os demais precisam de convite.
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/bps2414/glint/tree/main/server)
+
+Passo a passo (app no Discord, segredos, limites): [`docs/DEPLOY.md`](docs/DEPLOY.md).
+
+## Como usar
+
+| Ação | Como |
+|---|---|
+| Salvar o lance | **F8** (o atalho muda em Configurações) |
+| Abrir a biblioteca | clique no ícone da bandeja ou abra o Glint |
+| Recortar | arraste as alças na linha do tempo; o recorte fica salvo |
+| Trocar de clipe / tocar / tela cheia | ← → / Espaço / F |
+| Publicar | painel à direita → **Publicar e copiar link** → cole no Discord |
+
+## Perguntas frequentes
+
+**Dá ban no Valorant (Vanguard)?** O Glint grava a janela pelo Windows Graphics Capture, a mesma API
+que a Barra de Jogos usa. Não toca no processo do jogo. Foi testado com o Vanguard ativo. Nenhuma
+fabricante de anti-cheat endossa o app, então use seu próprio critério.
+
+**Quanto pesa no FPS?** No teste sintético a perda média ficou em ~1% gravando a janela. O encode é
+feito pela GPU, num bloco separado do que desenha o jogo.
+
+**Onde ficam os clipes?** Em `Vídeos\Glint` (dá para mudar). O limite de disco apaga os mais antigos
+primeiro; favoritos e publicados nunca.
+
+**Meu clipe publicado é público?** Por padrão fica "com o link": só abre para quem tem o endereço. Dá
+para trocar para "só eu" ou "público" a qualquer momento, ou apagar do servidor.
+
+**E no Linux?** O código de sistema está isolado para isso ser possível no futuro; hoje é só Windows.
+
+## Compilar do código
+
+Requisitos: Windows 10/11, Rust (toolchain MSVC, 1.85+), Visual Studio Build Tools com C++, LLVM
+(libclang para o bindgen) e um FFmpeg **LGPL shared**. O script abaixo baixa um FFmpeg adequado para
+`.deps\`, compila, testa e monta o pacote em `dist\Glint`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build-windows.ps1
+```
+
+Para o dia a dia, veja o [CONTRIBUTING.md](CONTRIBUTING.md); para como as peças se encaixam,
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (em inglês).
+
+## Licença
+
+Licenciado, à sua escolha, sob a [Apache License 2.0](LICENSE-APACHE) ou a [licença MIT](LICENSE-MIT).
+Salvo declaração em contrário, toda contribuição enviada intencionalmente para o Glint, como definido na
+Apache-2.0, entra com essa licença dupla, sem termos adicionais.
+
+Os builds de release trazem o FFmpeg como bibliotecas compartilhadas sob a LGPL; o texto da licença vai no
+pacote. As fontes (Inter, Geist Mono) são OFL.

@@ -1,0 +1,163 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+    # Mudança só de documentação/design não recompila nada (para atualizar o LEIA-ME do
+    # pacote sem mudar código: Actions → CI → Run workflow).
+    # O backend (server/) tem workflow próprio (server.yml), só Linux e rápido.
+    paths-ignore: ["docs/**", "*.md", "server/**", ".github/workflows/server.yml"]
+  pull_request:
+  workflow_dispatch:
+
+# Um push novo na mesma branch cancela o run anterior (que ficaria velho de qualquer jeito).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # CI não depura: sem debuginfo, link mais rápido e cache menor.
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  # Maior série do FFmpeg (build LGPL compartilhada do BtbN) aceita pelo ffmpeg-sys-next 9.
+  FFMPEG_MAX: "8.1"
+  # Identidade do app (ver crates/app-core/src/brand.rs e scripts/rename-brand.sh).
+  APP_NAME: Glint
+  APP_SLUG: glint
+
+jobs:
+  # fmt+clippy e testes em paralelo (cada um com seu cache): o tempo total é o do mais lento.
+  linux-lint:
+    name: Linux (fmt + clippy)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --all --check
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: linux-lint
+          cache-on-failure: true
+      - name: Dependências (FFmpeg dev + GPUI)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config clang ffmpeg \
+            libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
+            libswscale-dev libavfilter-dev libavdevice-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libvulkan-dev \
+            libx11-xcb-dev libxcb1-dev libasound2-dev libfontconfig-dev libfreetype-dev libzstd-dev
+      - run: cargo clippy --workspace --all-targets
+
+  linux-test:
+    name: Linux (testes)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: linux-test
+          cache-on-failure: true
+      - name: Dependências (FFmpeg dev + GPUI)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config clang ffmpeg \
+            libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
+            libswscale-dev libavfilter-dev libavdevice-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libvulkan-dev \
+            libx11-xcb-dev libxcb1-dev libasound2-dev libfontconfig-dev libfreetype-dev libzstd-dev
+      - run: cargo test --workspace
+        timeout-minutes: 20
+
+  # Só manual (Actions → CI → Run workflow): o build/teste/pacote Windows roda no PC do usuário com
+  # scripts/build-windows.ps1 (mais rápido, sem fila e sem gastar minutos). Fica aqui como reserva.
+  windows:
+    name: Windows (build + pacote de teste)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    timeout-minutes: 75
+    env:
+      # Pacote de teste, não o release final: sem LTO e com codegen em paralelo o build cai
+      # de ~6 para ~2-3 min (desempenho alguns % menor; o pesado do player é o FFmpeg em C).
+      # O release de verdade (Fase 7) usa o perfil do Cargo.toml (LTO thin, 1 unidade).
+      CARGO_PROFILE_RELEASE_LTO: "false"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Nome novo junto com a troca de perfil acima (o cache antigo tinha outro LTO).
+          shared-key: windows-ci
+          # Chave por run: sempre salva o target/ atualizado (release + testes) e
+          # restaura o mais recente. Sem isso, um cache salvo pela metade nunca é substituído.
+          key: ${{ github.run_id }}
+          # Salva o cache mesmo se um passo falhar: o próximo run não recompila tudo do zero.
+          cache-on-failure: true
+
+      - name: Baixar FFmpeg LGPL (BtbN)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Escolhe a série LGPL "shared" mais nova suportada pelo ffmpeg-sys-next (<= 8.1).
+          $names = gh release view latest -R BtbN/FFmpeg-Builds --json assets --jq '.assets[].name'
+          $best = $null; $bestVer = [version]"0.0"
+          foreach ($n in $names) {
+            if ($n -match '^ffmpeg-n(\d+)\.(\d+)-latest-win64-lgpl-shared-\d+\.\d+\.zip$') {
+              $v = [version]"$($Matches[1]).$($Matches[2])"
+              if ($v -le [version]$env:FFMPEG_MAX -and $v -gt $bestVer) { $best = $n; $bestVer = $v }
+            }
+          }
+          if (-not $best) { Write-Host "Assets disponíveis:"; $names | ForEach-Object { Write-Host "  $_" }; throw "nenhum FFmpeg LGPL shared compatível" }
+          Write-Host "Usando $best"
+          gh release download latest -R BtbN/FFmpeg-Builds -p $best -D ffdl
+          $zip = Get-ChildItem ffdl -Filter *.zip | Select-Object -First 1
+          Expand-Archive $zip.FullName -DestinationPath ffdl
+          $dir = Get-ChildItem ffdl -Directory | Select-Object -First 1
+          Write-Host "FFmpeg em $($dir.FullName)"
+          Get-ChildItem "$($dir.FullName)\lib" | Select-Object -First 20 | ForEach-Object { Write-Host $_.Name }
+          "FFMPEG_DIR=$($dir.FullName)" >> $env:GITHUB_ENV
+          "$($dir.FullName)\bin" >> $env:GITHUB_PATH
+          "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
+
+      - name: Build (release)
+        run: cargo build --release -p app-recorder -p app-ui
+
+      # Clippy do código Windows: roda antes de cada commit com
+      # `CARGO_CMD=clippy scripts/check-windows.sh` (alvo mingw). Aqui seria outra compilação
+      # inteira (~4,5 min).
+      # Testes com o MESMO conjunto de pacotes do build (inclui app-ui): as features das
+      # dependências (windows, serde, ...) ficam iguais e nada é recompilado.
+      - name: Testes (Windows)
+        timeout-minutes: 20
+        run: cargo test --release -p app-core -p app-media -p app-ipc -p app-platform-win -p app-recorder -p app-ui
+
+      # Pacote único: gravador + app (a UI agora usa o FFmpeg para o player) + DLLs + scripts.
+      # Serve para os testes de todas as fases (0 a 3).
+      - name: Empacotar (fase 3)
+        shell: pwsh
+        run: |
+          $out = "dist\$env:APP_NAME-fase5"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Copy-Item target\release\$env:APP_SLUG-recorder.exe $out
+          Copy-Item target\release\$env:APP_SLUG.exe $out
+          Copy-Item "$env:FFMPEG_DIR\bin\*.dll" $out
+          Copy-Item "$env:FFMPEG_DIR\LICENSE.txt" "$out\FFMPEG-LICENSE.txt" -ErrorAction SilentlyContinue
+          Copy-Item crates\app-ui\assets\fonts\OFL.txt "$out\FONTES-OFL.txt"
+          Copy-Item README.pt-BR.md "$out\LEIA-ME.md"
+          Copy-Item scripts\TESTE.bat, scripts\teste-guiado.ps1 $out
+          New-Item -ItemType Directory -Force "$out\avancado" | Out-Null
+          Copy-Item scripts\avancado\*.bat "$out\avancado"
+          Get-ChildItem $out | ForEach-Object { Write-Host $_.Name }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-fase5-windows
+          path: dist/${{ env.APP_NAME }}-fase5
+          retention-days: 30

@@ -1,0 +1,156 @@
+name: Release
+
+# Push de uma tag `vX.Y.Z` (ou `vX.Y.Z-rc.N`) publica o release no GitHub: instalador do Inno Setup
+# + latest.json, de onde o app se atualiza (https://github.com/<repo>/releases/latest/download/latest.json).
+#
+# Versão: vem do Cargo.toml e a tag precisa bater (`v1.0.0-rc.1` <-> version = "1.0.0-rc.1").
+# Se divergir o job falha ANTES de compilar: suba a versão no Cargo.toml, commite e crie a tag de novo.
+#
+# Notas do release: mensagem da tag anotada (`git tag -a v1.0.0 -m "texto"`); tag sem mensagem
+# usa as notas geradas pelo GitHub.
+#
+# Sempre release normal e marcado como "latest" (nunca prerelease): o /releases/latest/ do GitHub
+# ignora pre-releases e as RCs precisam chegar pelo atualizador.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  # Maior série do FFmpeg (build LGPL compartilhada do BtbN) aceita pelo ffmpeg-sys-next 9.
+  FFMPEG_MAX: "8.1"
+  # Identidade do app (ver crates/app-core/src/brand.rs e scripts/rename-brand.sh).
+  APP_NAME: Glint
+  APP_SLUG: glint
+
+jobs:
+  release:
+    name: Release (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Conferir versão (tag x Cargo.toml)
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
+          if ($tag -ne "v$version") { throw "a tag $tag não bate com a versão do Cargo.toml ($version)" }
+          "VERSION=$version" >> $env:GITHUB_ENV
+          Write-Host "Versão $version"
+
+      # O checkout troca a tag anotada por uma leve e perde a mensagem: busca a tag de novo.
+      - name: Notas do release
+        shell: pwsh
+        run: |
+          git fetch --force origin "refs/tags/${{ github.ref_name }}:refs/tags/${{ github.ref_name }}"
+          $notes = (git tag -l --format='%(contents)' "${{ github.ref_name }}") -join "`n"
+          [System.IO.File]::WriteAllText("$PWD\notes.md", $notes.Trim(), [System.Text.UTF8Encoding]::new($false))
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: windows-release
+          cache-on-failure: true
+
+      - name: Baixar FFmpeg LGPL (BtbN)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Escolhe a série LGPL "shared" mais nova suportada pelo ffmpeg-sys-next (<= 8.1).
+          $names = gh release view latest -R BtbN/FFmpeg-Builds --json assets --jq '.assets[].name'
+          $best = $null; $bestVer = [version]"0.0"
+          foreach ($n in $names) {
+            if ($n -match '^ffmpeg-n(\d+)\.(\d+)-latest-win64-lgpl-shared-\d+\.\d+\.zip$') {
+              $v = [version]"$($Matches[1]).$($Matches[2])"
+              if ($v -le [version]$env:FFMPEG_MAX -and $v -gt $bestVer) { $best = $n; $bestVer = $v }
+            }
+          }
+          if (-not $best) { Write-Host "Assets disponíveis:"; $names | ForEach-Object { Write-Host "  $_" }; throw "nenhum FFmpeg LGPL shared compatível" }
+          Write-Host "Usando $best"
+          gh release download latest -R BtbN/FFmpeg-Builds -p $best -D ffdl
+          $zip = Get-ChildItem ffdl -Filter *.zip | Select-Object -First 1
+          Expand-Archive $zip.FullName -DestinationPath ffdl
+          $dir = Get-ChildItem ffdl -Directory | Select-Object -First 1
+          Write-Host "FFmpeg em $($dir.FullName)"
+          "FFMPEG_DIR=$($dir.FullName)" >> $env:GITHUB_ENV
+          "$($dir.FullName)\bin" >> $env:GITHUB_PATH
+          "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
+
+      # Perfil release do Cargo.toml (LTO), diferente do pacote de teste do ci.yml.
+      - name: Build (release)
+        run: cargo build --release -p app-recorder -p app-ui
+
+      # Mesmo conjunto de pacotes do build: nada é recompilado.
+      - name: Testes (Windows)
+        timeout-minutes: 20
+        run: cargo test --release -p app-core -p app-media -p app-ipc -p app-platform-win -p app-recorder -p app-ui
+
+      # Só o que o usuário precisa (igual ao scripts/release.ps1).
+      - name: Empacotar
+        shell: pwsh
+        run: |
+          $out = "dist\$env:APP_NAME"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Copy-Item target\release\$env:APP_SLUG-recorder.exe $out
+          Copy-Item target\release\$env:APP_SLUG.exe $out
+          Copy-Item "$env:FFMPEG_DIR\bin\*.dll" $out
+          Copy-Item "$env:FFMPEG_DIR\LICENSE.txt" "$out\FFMPEG-LICENSE.txt" -ErrorAction SilentlyContinue
+          Copy-Item crates\app-ui\assets\fonts\OFL.txt "$out\FONTES-OFL.txt"
+          Get-ChildItem $out | ForEach-Object { Write-Host $_.Name }
+
+      # O Inno Setup 6 normalmente já vem na imagem; se não, instala pelo Chocolatey.
+      - name: Instalador (Inno Setup)
+        shell: pwsh
+        run: |
+          function Find-Iscc {
+            @("C:\Program Files (x86)\Inno Setup 6\ISCC.exe", "C:\Program Files\Inno Setup 6\ISCC.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          $iscc = Find-Iscc
+          if (-not $iscc) {
+            Write-Host "Inno Setup não está na imagem: instalando (choco)"
+            choco install innosetup -y --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "choco install innosetup falhou" }
+            $iscc = Find-Iscc
+          }
+          if (-not $iscc) { throw "ISCC.exe não encontrado" }
+          & $iscc "/DAppVersion=$env:VERSION" "/DSrcDir=..\dist\$env:APP_NAME" installer\glint.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup falhou" }
+          if (-not (Test-Path "dist\$env:APP_NAME-Setup-$env:VERSION.exe")) { throw "instalador não foi gerado" }
+
+      # latest.json no formato do atualizador (app_cloud::update::Release): a url aponta para o
+      # asset do próprio release.
+      - name: latest.json
+        shell: pwsh
+        run: |
+          $file = "$env:APP_NAME-Setup-$env:VERSION.exe"
+          $setup = Get-Item "dist\$file"
+          $sha = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLower()
+          $json = [ordered]@{
+            version = $env:VERSION
+            url     = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$file"
+            file    = $file
+            size    = $setup.Length
+            sha256  = $sha
+            notes   = (Get-Content notes.md -Raw -Encoding utf8) ?? ""
+          } | ConvertTo-Json -Compress
+          [System.IO.File]::WriteAllText("$PWD\dist\latest.json", $json, [System.Text.UTF8Encoding]::new($false))
+          Write-Host $json
+
+      - name: Publicar release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $ghArgs = @("release", "create", $tag, "dist\$env:APP_NAME-Setup-$env:VERSION.exe", "dist\latest.json",
+                    "--title", "$env:APP_NAME $env:VERSION", "--latest", "--verify-tag")
+          if ((Get-Item notes.md).Length -gt 0) { $ghArgs += @("--notes-file", "notes.md") } else { $ghArgs += "--generate-notes" }
+          gh @ghArgs
+          if ($LASTEXITCODE -ne 0) { throw "gh release create falhou" }

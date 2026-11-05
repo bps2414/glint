@@ -1,0 +1,14 @@
+[package]
+name = "make-icons"
+description = "Gera os ícones do app e do site a partir de docs/brand/*.svg (a saída fica commitada)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+# Versões fixas com mais de duas semanas (regra do projeto para dependências novas).
+resvg = { version = "=0.48.1", default-features = false }
+ico = "=0.6.0"

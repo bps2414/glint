@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 100 100">
+  <!-- Ícone do Glint (versão A aprovada em 04/11/2026): lente de vidro com reflexo, squircle grafite. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2c2e33"/>
+      <stop offset="1" stop-color="#0f1013"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0.02"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.06"/>
+    </linearGradient>
+    <radialGradient id="glass" cx="0.5" cy="0.45" r="0.55">
+      <stop offset="0.55" stop-color="#ffffff" stop-opacity="0.06"/>
+      <stop offset="0.92" stop-color="#ffffff" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.55"/>
+    </radialGradient>
+    <radialGradient id="core" cx="0.42" cy="0.38" r="0.7">
+      <stop offset="0" stop-color="#3a3d44"/>
+      <stop offset="1" stop-color="#07080a"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <path d="M28,0 H72 C92,0 100,8 100,28 V72 C100,92 92,100 72,100 H28 C8,100 0,92 0,72 V28 C0,8 8,0 28,0 Z" fill="url(#tile)"/>
+  <path d="M28,0.6 H72 C91.6,0.6 99.4,8.4 99.4,28 V72 C99.4,91.6 91.6,99.4 72,99.4 H28 C8.4,99.4 0.6,91.6 0.6,72 V28 C0.6,8.4 8.4,0.6 28,0.6 Z" fill="none" stroke="url(#edge)" stroke-width="1.2"/>
+  <circle cx="50" cy="55" r="30" fill="#000000" opacity="0.35"/>
+  <circle cx="50" cy="52" r="30" fill="url(#glass)"/>
+  <circle cx="50" cy="52" r="29.4" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="0.8"/>
+  <circle cx="50" cy="52" r="17" fill="url(#core)"/>
+  <circle cx="50" cy="52" r="17" fill="none" stroke="#ffffff" stroke-opacity="0.12" stroke-width="0.6"/>
+  <path d="M31,44 A21,21 0 0 1 46,30" fill="none" stroke="#ffffff" stroke-opacity="0.75" stroke-width="2.2" stroke-linecap="round"/>
+  <circle cx="70" cy="30" r="9" fill="url(#glow)" opacity="0.5"/>
+  <path d="M70,21 Q71.1,28.9 79,30 Q71.1,31.1 70,39 Q68.9,31.1 61,30 Q68.9,28.9 70,21 Z" fill="#ffffff"/>
+</svg>

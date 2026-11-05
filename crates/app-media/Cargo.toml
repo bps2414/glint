@@ -1,0 +1,16 @@
+[package]
+name = "app-media"
+description = "Encode (hardware), mux e remux de clipes via FFmpeg (LGPL, link dinâmico)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+app-core.workspace = true
+ffmpeg-sys-next.workspace = true
+thiserror.workspace = true
+crossbeam-channel.workspace = true
+libc = "0.2"
+tracing.workspace = true

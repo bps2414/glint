@@ -1,0 +1,8 @@
+/target
+/dist
+*.mp4
+/.ffmpeg
+/.deps
+
+# Documentos internos (só locais)
+/docs/interno/

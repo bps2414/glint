@@ -1,0 +1,34 @@
+[package]
+name = "app-recorder"
+description = "Gravador do Clipe: mantém o replay buffer e salva clipes na hotkey."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+sys-locale = "0.3"
+app-core.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-appender.workspace = true
+parking_lot.workspace = true
+
+[build-dependencies]
+# Ícone e versão no .exe (Windows); fora do Windows não faz nada.
+embed-resource = "=3.0.12"
+
+[target.'cfg(windows)'.dependencies]
+app-media.workspace = true
+app-platform-win.workspace = true
+app-ipc.workspace = true
+rust-i18n = "4"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+ctrlc = "3"
+
+# Nome do executável (único lugar além de brand.rs a mudar ao renomear o app).
+[[bin]]
+name = "glint-recorder"
+path = "src/main.rs"

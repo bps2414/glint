@@ -1,0 +1,20 @@
+[package]
+name = "app-ipc"
+description = "Protocolo gravador ↔ interface: mensagens tipadas sobre socket local (named pipe no Windows, Unix socket no Linux)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+app-core.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+interprocess = "2.4"
+postcard = { version = "1.1", default-features = false, features = ["use-std"] }
+
+[target.'cfg(windows)'.dependencies]
+# Migração do nome antigo (`legacy`): credencial e autostart.
+app-platform-win.workspace = true

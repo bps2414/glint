@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 100 100">
+  <!-- Variante para 16–24 px: sem o anel fino interno, lente e realce mais grossos, reflexo maior. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#34363c"/>
+      <stop offset="1" stop-color="#121316"/>
+    </linearGradient>
+    <radialGradient id="core" cx="0.42" cy="0.38" r="0.7">
+      <stop offset="0" stop-color="#3a3d44"/>
+      <stop offset="1" stop-color="#07080a"/>
+    </radialGradient>
+  </defs>
+  <path d="M28,0 H72 C92,0 100,8 100,28 V72 C100,92 92,100 72,100 H28 C8,100 0,92 0,72 V28 C0,8 8,0 28,0 Z" fill="url(#tile)"/>
+  <circle cx="48" cy="54" r="31" fill="#ffffff" fill-opacity="0.22"/>
+  <circle cx="48" cy="54" r="29" fill="none" stroke="#ffffff" stroke-opacity="0.7" stroke-width="5"/>
+  <circle cx="48" cy="54" r="17" fill="url(#core)"/>
+  <path d="M28,46 A22,22 0 0 1 42,32" fill="none" stroke="#ffffff" stroke-opacity="0.9" stroke-width="6" stroke-linecap="round"/>
+  <path d="M74,10 Q76,26 92,28 Q76,30 74,46 Q72,30 56,28 Q72,26 74,10 Z" fill="#ffffff"/>
+</svg>

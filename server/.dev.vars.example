@@ -1,0 +1,6 @@
+# Copy to .dev.vars to run `npm run dev` (never commit .dev.vars).
+# Also read by the "Deploy to Cloudflare" button: these are the secrets it asks for.
+# Client Secret of your Discord app (Developer Portal > OAuth2).
+DISCORD_CLIENT_SECRET=
+# 32+ random characters. Generate: node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+SIGNING_KEY=
