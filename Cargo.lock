@@ -211,7 +211,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "app-cloud"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "base64 0.22.1",
  "getrandom 0.3.4",
@@ -225,7 +225,7 @@ dependencies = [
 
 [[package]]
 name = "app-core"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "directories",
  "rusqlite",
@@ -237,7 +237,7 @@ dependencies = [
 
 [[package]]
 name = "app-ipc"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "app-core",
  "app-platform-win",
@@ -250,7 +250,7 @@ dependencies = [
 
 [[package]]
 name = "app-media"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "app-core",
  "crossbeam-channel",
@@ -262,7 +262,7 @@ dependencies = [
 
 [[package]]
 name = "app-platform-win"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "app-core",
  "parking_lot",
@@ -275,7 +275,7 @@ dependencies = [
 
 [[package]]
 name = "app-recorder"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "anyhow",
  "app-core",
@@ -296,7 +296,7 @@ dependencies = [
 
 [[package]]
 name = "app-ui"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "anyhow",
  "app-cloud",
@@ -4015,7 +4015,7 @@ checksum = "dae608c151f68243f2b000364e1f7b186d9c29845f7d2d85bd31b9ad77ad552b"
 
 [[package]]
 name = "make-icons"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "anyhow",
  "ico",

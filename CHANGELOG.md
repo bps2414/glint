@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.0-rc.3
+
+- **Kill clips:** a second hotkey (**F9** by default) saves a short clip around the play instead of the
+  full 60 s: 8 s before the press and 2 s after. Pressing it again within 6 s extends the same clip, so
+  a quick double or triple kill becomes one clip marked "x2"/"x3". Each press plays a short tick; the
+  clip is saved when the combo window closes. Kill clips get their own "Kills" section in the library
+  and a badge on the card. Times and hotkey are in Settings > Kill clip.
+- **Hotkeys:** if another app already uses one of the hotkeys, the other keeps working (before, one busy
+  key disabled both); the tray says which one is busy.
+- **Clip page:** on phones, leaving fullscreen on the video no longer leaves the page zoomed out with a
+  long empty scroll.
+
 ## 1.0.0-rc.2
 
 - **Discord Rich Presence:** your Discord profile shows "Clipping VALORANT with Glint" while a game is
