@@ -52,3 +52,12 @@ Fica em `server/feedback/` (como `server/redirect/`: `index.ts` + `wrangler.json
 - Mensagem vira issue pública: a janela avisa "sua mensagem fica pública no GitHub; logs e contato não".
 - Endpoint aberto atrai spam: rate limit por IP; se apertar, Turnstile não serve (app nativo), aí a saída é desligar a criação automática de issue e triar pelo D1.
 - Log pode carregar dado pessoal mesmo limpo: opt-in visível e "ver o que será enviado".
+
+## Status (2026-11-10)
+
+Feito: Worker no ar em `feedback.getglint.workers.dev` (D1 `glint-feedback`, R2 `glint-feedback`, rate limit, `ADMIN_TOKEN` guardado em `D:\Bryan\Dev\Data\glint-feedback\admin-token.txt`, labels `bug`/`feedback`/`from-app` no repo) e testado em produção (report salvo, log no R2, download com token). App: envio, coleta e limpeza dos logs, janela, seção Ajuda, item "Reportar bug" na bandeja (`glint://feedback?kind=bug`), textos EN/pt-BR.
+
+Falta:
+- `GITHUB_TOKEN` (fine-grained, só `bps2414/glint`, Issues: Read and write): `npx wrangler secret put GITHUB_TOKEN -c feedback/wrangler.jsonc` em `server/`. Sem ele os reports são salvos mas nenhuma issue é aberta.
+- Testar a janela de verdade: um bug e um feedback enviados pelo app, conferindo D1, R2 e a issue.
+- Docs (SECURITY, READMEs, CHANGELOG).

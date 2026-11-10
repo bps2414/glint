@@ -103,6 +103,8 @@ pub struct Shell {
     pub join: Option<JoinView>,
     /// Assistente "Criar meu servidor" / "Atualizar servidor".
     pub create: Option<crate::views::create_server::CreateView>,
+    /// Janela "Reportar bug / Enviar feedback".
+    pub feedback: Option<crate::views::feedback::FeedbackView>,
     /// Código de outro PC ou membros (abertos nas Configurações).
     pub server_modal: Option<ServerModal>,
     /// `GET /info` do servidor configurado.
@@ -163,6 +165,7 @@ impl Shell {
             inbox,
             join: None,
             create: None,
+            feedback: None,
             server_modal: None,
             server_info: None,
             admin: false,
@@ -783,6 +786,7 @@ impl Render for Shell {
             let modal = self.clip_modal(cx);
             let join = self.join_modal(window, cx);
             let create = self.create_modal(window, cx);
+            let feedback = self.feedback_modal(window, cx);
             return root
                 .relative()
                 .child(
@@ -798,7 +802,8 @@ impl Render for Shell {
                 )
                 .children(modal)
                 .children(join)
-                .children(create);
+                .children(create)
+                .children(feedback);
         }
 
         let list = match self.screen {
@@ -816,6 +821,7 @@ impl Render for Shell {
         let server_modal = self.server_modal_view(cx);
         let join = self.join_modal(window, cx);
         let create = self.create_modal(window, cx);
+        let feedback = self.feedback_modal(window, cx);
         root.relative()
             .child(self.sidebar(cx))
             .child(
@@ -834,5 +840,6 @@ impl Render for Shell {
             .children(server_modal)
             .children(join)
             .children(create)
+            .children(feedback)
     }
 }

@@ -15,6 +15,7 @@
 //! - [`process`]: CPU e memória do próprio processo.
 //! - [`credentials`]: token da conta no Gerenciador de Credenciais.
 //! - [`instance`]: instância única; [`console`]: console nos modos de linha de comando.
+//! - [`system`]: versão do Windows (bug report).
 #![cfg(windows)]
 
 pub mod appearance;
@@ -35,6 +36,7 @@ pub mod present;
 pub mod process;
 pub mod shell;
 pub mod sound;
+pub mod system;
 pub mod tray;
 pub mod tray_menu;
 pub mod window;

@@ -86,6 +86,12 @@ impl Shell {
 
     /// Link `glint://` recebido (abertura do app ou janela já aberta).
     pub fn open_link(&mut self, link: &str, cx: &mut Context<Self>) {
+        // `glint://feedback[?kind=bug]` (item "Reportar bug" da bandeja).
+        if link.to_ascii_lowercase().starts_with("glint://feedback") {
+            let bug = link.contains("kind=bug");
+            use app_cloud::feedback::Kind;
+            return self.open_feedback(if bug { Kind::Bug } else { Kind::Feedback }, cx);
+        }
         match invite::parse(link) {
             Some(i) => self.open_join(Some(i), cx),
             None => self.notify_user(tr("join.invalid_link"), cx),

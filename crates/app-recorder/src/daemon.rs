@@ -310,6 +310,7 @@ impl Daemon {
                 self.save_config();
                 self.sync_autostart();
             }
+            TrayCommand::ReportBug => self.open_ui(&["glint://feedback?kind=bug"]),
             TrayCommand::Quit => self.quit = true,
         }
     }
@@ -525,13 +526,18 @@ impl Daemon {
     }
 
     fn open_library(&self) {
+        self.open_ui(&[]);
+    }
+
+    /// Abre a interface (com `args`, ex.: um link `glint://`); sem ela instalada, a pasta.
+    fn open_ui(&self, args: &[&str]) {
         let ui = std::env::current_exe().ok().and_then(|p| {
             p.parent()
                 .map(|d| d.join(format!("{}.exe", brand::APP_SLUG)))
         });
         match ui {
             Some(exe) if exe.exists() => {
-                if let Err(e) = shell::spawn_detached(&exe, &[]) {
+                if let Err(e) = shell::spawn_detached(&exe, args) {
                     tracing::warn!("não foi possível abrir a interface: {e}");
                 }
             }
@@ -954,6 +960,7 @@ impl Daemon {
             folder_label: t!("tray.folder").to_string(),
             start_with_os_label: t!("tray.start_with_os").to_string(),
             start_with_os: self.cfg.start_with_os,
+            report_bug_label: t!("tray.report_bug").to_string(),
             quit_label: t!("tray.quit").to_string(),
         }
     }

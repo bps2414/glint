@@ -36,3 +36,9 @@ pub const CLIP_FILE_PREFIX: &str = APP_NAME;
 pub fn log_env_var() -> String {
     format!("{}_LOG", APP_SLUG.to_uppercase())
 }
+
+/// Página do repositório (botão "Leave a star"; dar star exige conta no GitHub).
+pub const REPO_URL: &str = "https://github.com/bps2414/glint";
+
+/// Worker do mantenedor que recebe feedback e bug reports (`server/feedback/`).
+pub const FEEDBACK_URL: &str = "https://feedback.getglint.workers.dev/v1/report";

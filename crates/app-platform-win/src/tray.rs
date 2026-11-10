@@ -45,6 +45,8 @@ pub enum TrayCommand {
     /// Gravar a tela agora / parar a gravação (o texto muda com o estado).
     ToggleManual,
     ToggleStartWithOs,
+    /// Abre o app na janela "Reportar bug".
+    ReportBug,
     Quit,
 }
 
@@ -67,6 +69,7 @@ pub struct TrayState {
     pub folder_label: String,
     pub start_with_os_label: String,
     pub start_with_os: bool,
+    pub report_bug_label: String,
     pub quit_label: String,
 }
 
@@ -281,6 +284,13 @@ fn model(s: &TrayState) -> MenuModel {
                 true,
                 Some(s.start_with_os),
                 TrayCommand::ToggleStartWithOs,
+                false,
+            ),
+            item(
+                &s.report_bug_label,
+                true,
+                None,
+                TrayCommand::ReportBug,
                 false,
             ),
             item(&s.quit_label, true, None, TrayCommand::Quit, true),

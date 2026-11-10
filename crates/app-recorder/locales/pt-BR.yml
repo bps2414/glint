@@ -19,5 +19,6 @@ tray:
   library: "Abrir biblioteca"
   folder: "Abrir pasta dos clipes"
   start_with_os: "Iniciar com o Windows"
+  report_bug: "Reportar bug"
   quit: "Sair"
   screen: "Tela"

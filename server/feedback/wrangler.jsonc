@@ -16,7 +16,7 @@
     {
       "binding": "DB",
       "database_name": "glint-feedback",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "301e4632-3818-45ae-99d5-b0fcd84bd1a6",
       "migrations_dir": "migrations"
     }
   ],

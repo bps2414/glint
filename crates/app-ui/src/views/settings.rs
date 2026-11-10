@@ -789,6 +789,46 @@ impl Shell {
                     ),
                 ],
             ))
+            .child(section(
+                tr("settings.help"),
+                vec![
+                    row(
+                        tr("settings.report_bug"),
+                        Some(tr("settings.report_bug_hint")),
+                        Btn::new(
+                            "set-report-bug",
+                            BtnKind::Secondary,
+                            tr("settings.report_bug_btn"),
+                        )
+                        .size(Size::Sm)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.open_feedback(app_cloud::feedback::Kind::Bug, cx)
+                        })),
+                    ),
+                    row(
+                        tr("settings.send_feedback"),
+                        Some(tr("settings.send_feedback_hint")),
+                        Btn::new(
+                            "set-feedback",
+                            BtnKind::Secondary,
+                            tr("settings.send_feedback_btn"),
+                        )
+                        .size(Size::Sm)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.open_feedback(app_cloud::feedback::Kind::Feedback, cx)
+                        })),
+                    ),
+                    row(
+                        tr("settings.star"),
+                        Some(tr("settings.star_hint")),
+                        Btn::new("set-star", BtnKind::Secondary, tr("settings.star_btn"))
+                            .size(Size::Sm)
+                            .on_click(
+                                cx.listener(|_, _, _, cx| cx.open_url(app_core::brand::REPO_URL)),
+                            ),
+                    ),
+                ],
+            ))
             .child(section(tr("settings.server"), server_rows))
             .child(section(
                 tr("settings.server_advanced"),

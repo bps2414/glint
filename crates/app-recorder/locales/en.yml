@@ -19,5 +19,6 @@ tray:
   library: "Open library"
   folder: "Open clips folder"
   start_with_os: "Start with Windows"
+  report_bug: "Report a bug"
   quit: "Quit"
   screen: "Screen"
