@@ -18,6 +18,7 @@ wasapi = "0.26"
 tray-icon = { version = "0.26", default-features = false }
 windows = { workspace = true, features = [
     "Foundation",
+    "Foundation_Metadata",
     "Graphics",
     "Graphics_Capture",
     "Graphics_DirectX",

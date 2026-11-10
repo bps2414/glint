@@ -1,15 +1,23 @@
-//! Windows Graphics Capture (WGC).
+//! Captura de tela/janela.
 //!
-//! Captura no nível do compositor (DWM): **não injeta nada no processo do
-//! jogo** (seguro para o Vanguard). Cada frame chega como textura D3D11 e é
-//! copiado (GPU→GPU) para um "slot" com o frame mais recente, que o loop de
-//! encode consome no seu próprio ritmo (CFR).
+//! Duas APIs, ambas no nível do compositor (DWM), que **não injetam nada no
+//! processo do jogo** (seguro para o Vanguard):
+//! - Windows Graphics Capture (WGC): padrão onde dá para tirar a borda
+//!   amarela (Windows 11).
+//! - DXGI Desktop Duplication ([`crate::capture_dxgi`]): no Windows 10, onde a
+//!   WGC sempre desenha a borda.
+//!
+//! Cada frame chega como textura D3D11 e é copiado (GPU→GPU) para um "slot"
+//! com o frame mais recente, que o loop de encode consome no seu próprio
+//! ritmo (CFR).
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 
+use app_core::CaptureBackend;
 use parking_lot::Mutex;
-use windows::core::{IInspectable, Interface};
+use windows::core::{IInspectable, Interface, HSTRING};
+use windows::Foundation::Metadata::ApiInformation;
 use windows::Foundation::{TimeSpan, TypedEventHandler};
 use windows::Graphics::Capture::{
     Direct3D11CaptureFramePool, GraphicsCaptureItem, GraphicsCaptureSession,
@@ -26,6 +34,7 @@ use windows::Win32::Graphics::Gdi::{MonitorFromWindow, HMONITOR, MONITOR_DEFAULT
 use windows::Win32::System::WinRT::Direct3D11::IDirect3DDxgiInterfaceAccess;
 use windows::Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop;
 
+use crate::capture_dxgi::DxgiCapture;
 use crate::gpu::Gpu;
 use crate::{Error, Result};
 
@@ -56,11 +65,16 @@ pub struct CaptureShared {
 }
 
 pub struct Capture {
-    session: GraphicsCaptureSession,
-    pool: Direct3D11CaptureFramePool,
+    backend: Backend,
     shared: Arc<CaptureShared>,
-    pub width: u32,
-    pub height: u32,
+}
+
+enum Backend {
+    Wgc {
+        session: GraphicsCaptureSession,
+        pool: Direct3D11CaptureFramePool,
+    },
+    Dxgi(DxgiCapture),
 }
 
 const PIXEL_FORMAT: DirectXPixelFormat = DirectXPixelFormat::B8G8R8A8UIntNormalized;
@@ -84,12 +98,51 @@ fn create_item(target: CaptureTarget) -> Result<GraphicsCaptureItem> {
     }
 }
 
+/// A WGC deixa tirar a borda amarela (`IsBorderRequired`, build 20348+:
+/// Windows 11). No Windows 10 a propriedade não existe e a borda fica.
+fn wgc_border_removable() -> bool {
+    ApiInformation::IsPropertyPresent(
+        &HSTRING::from("Windows.Graphics.Capture.GraphicsCaptureSession"),
+        &HSTRING::from("IsBorderRequired"),
+    )
+    .unwrap_or(false)
+}
+
 impl Capture {
     pub fn is_supported() -> bool {
         GraphicsCaptureSession::IsSupported().unwrap_or(false)
     }
 
-    pub fn start(gpu: &Gpu, target: CaptureTarget, fps: u32) -> Result<Self> {
+    pub fn start(
+        gpu: &Gpu,
+        target: CaptureTarget,
+        fps: u32,
+        backend: CaptureBackend,
+    ) -> Result<Self> {
+        let dxgi = match backend {
+            CaptureBackend::Dxgi => true,
+            CaptureBackend::Wgc => false,
+            CaptureBackend::Auto => !wgc_border_removable(),
+        };
+        if dxgi {
+            let shared = Arc::new(CaptureShared::default());
+            match DxgiCapture::start(gpu, target, fps, shared.clone()) {
+                Ok(c) => {
+                    return Ok(Self {
+                        backend: Backend::Dxgi(c),
+                        shared,
+                    })
+                }
+                Err(e) if backend == CaptureBackend::Auto => {
+                    tracing::warn!("DXGI Desktop Duplication falhou, usando WGC (com borda): {e}");
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        Self::start_wgc(gpu, target, fps)
+    }
+
+    fn start_wgc(gpu: &Gpu, target: CaptureTarget, fps: u32) -> Result<Self> {
         if !Self::is_supported() {
             return Err(Error::Other(
                 "Windows Graphics Capture não suportado (requer Windows 10 1903+)".into(),
@@ -147,13 +200,14 @@ impl Capture {
         }
 
         session.StartCapture()?;
-        tracing::info!(width = size.Width, height = size.Height, "captura iniciada");
+        tracing::info!(
+            width = size.Width,
+            height = size.Height,
+            "captura iniciada (Windows Graphics Capture)"
+        );
         Ok(Self {
-            session,
-            pool,
+            backend: Backend::Wgc { session, pool },
             shared,
-            width: size.Width as u32,
-            height: size.Height as u32,
         })
     }
 
@@ -161,9 +215,14 @@ impl Capture {
         &self.shared
     }
 
-    pub fn stop(&self) {
-        let _ = self.session.Close();
-        let _ = self.pool.Close();
+    pub fn stop(&mut self) {
+        match &mut self.backend {
+            Backend::Wgc { session, pool } => {
+                let _ = session.Close();
+                let _ = pool.Close();
+            }
+            Backend::Dxgi(c) => c.stop(),
+        }
     }
 }
 
@@ -202,9 +261,30 @@ fn on_frame(
 
     let mut src_desc = D3D11_TEXTURE2D_DESC::default();
     unsafe { src.GetDesc(&mut src_desc) };
-    let w = (content.Width as u32).min(src_desc.Width);
-    let h = (content.Height as u32).min(src_desc.Height);
+    let region = D3D11_BOX {
+        left: 0,
+        top: 0,
+        front: 0,
+        right: (content.Width as u32).min(src_desc.Width),
+        bottom: (content.Height as u32).min(src_desc.Height),
+        back: 1,
+    };
+    store_frame(gpu, shared, &src, &region)
+}
 
+/// Copia `region` de `src` para o slot do frame mais recente (recriando o
+/// slot se o tamanho mudou).
+pub(crate) fn store_frame(
+    gpu: &Gpu,
+    shared: &CaptureShared,
+    src: &ID3D11Texture2D,
+    region: &D3D11_BOX,
+) -> Result<()> {
+    let w = region.right - region.left;
+    let h = region.bottom - region.top;
+    if w == 0 || h == 0 {
+        return Ok(());
+    }
     let mut latest = shared.latest.lock();
     let needs_new = match latest.as_ref() {
         Some(l) => l.width != w || l.height != h,
@@ -235,17 +315,9 @@ fn on_frame(
         });
     }
     let dst = latest.as_ref().expect("slot criado acima");
-    let region = D3D11_BOX {
-        left: 0,
-        top: 0,
-        front: 0,
-        right: w,
-        bottom: h,
-        back: 1,
-    };
     unsafe {
         gpu.context
-            .CopySubresourceRegion(&dst.texture, 0, 0, 0, 0, &src, 0, Some(&region));
+            .CopySubresourceRegion(&dst.texture, 0, 0, 0, 0, src, 0, Some(region));
     }
     drop(latest);
     shared.frames.fetch_add(1, Ordering::Release);

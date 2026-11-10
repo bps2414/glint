@@ -1,7 +1,8 @@
 //! Backend Windows do app.
 //!
 //! - [`gpu::Gpu`]: dispositivo D3D11 compartilhado (captura, conversão, encoder).
-//! - [`capture::Capture`]: Windows Graphics Capture (sem injeção no jogo).
+//! - [`capture::Capture`]: captura sem injeção no jogo (Windows Graphics Capture ou,
+//!   no Windows 10, [`capture_dxgi`] para não ter borda amarela).
 //! - [`convert::Converter`]: BGRA → NV12 + escala via D3D11 VideoProcessor.
 //! - [`audio`]: WASAPI loopback (sistema ou processo) e microfone.
 //! - [`hotkey`]: hotkeys globais (RegisterHotKey).
@@ -20,6 +21,7 @@ pub mod appearance;
 pub mod audio;
 pub mod autostart;
 pub mod capture;
+pub mod capture_dxgi;
 pub mod clock;
 pub mod console;
 pub mod convert;

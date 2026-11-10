@@ -91,8 +91,8 @@ impl Session {
     pub fn start(cfg: &Config, p: SessionParams) -> Result<Self> {
         let gpu = Gpu::new().context("criando dispositivo D3D11")?;
         let fps = cfg.video.fps;
-        let capture =
-            Capture::start(&gpu, p.target, fps).context("iniciando Windows Graphics Capture")?;
+        let capture = Capture::start(&gpu, p.target, fps, cfg.video.capture_backend)
+            .context("iniciando captura")?;
         let shared = capture.shared().clone();
         let (src_w, src_h) = wait_first_frame(&shared)?;
 

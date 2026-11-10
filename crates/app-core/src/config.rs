@@ -66,6 +66,8 @@ pub struct VideoConfig {
     pub bitrate_kbps: u32,
     /// Intervalo entre keyframes em segundos (precisão do corte sem re-encode).
     pub keyframe_interval_secs: u32,
+    /// API de captura. Só para diagnóstico; o padrão escolhe sozinho.
+    pub capture_backend: CaptureBackend,
 }
 
 impl Default for VideoConfig {
@@ -76,8 +78,23 @@ impl Default for VideoConfig {
             fps: 60,
             bitrate_kbps: 25_000,
             keyframe_interval_secs: 1,
+            capture_backend: CaptureBackend::Auto,
         }
     }
+}
+
+/// Qual API do Windows captura a tela.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CaptureBackend {
+    /// Windows Graphics Capture onde dá para tirar a borda amarela (Windows 11);
+    /// senão (Windows 10), DXGI Desktop Duplication.
+    #[default]
+    Auto,
+    /// Windows Graphics Capture sempre (no Windows 10 com borda amarela).
+    Wgc,
+    /// DXGI Desktop Duplication sempre (sem borda; a janela é recortada do monitor).
+    Dxgi,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

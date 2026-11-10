@@ -193,7 +193,8 @@ pub fn diagnose(args: &Args) -> Result<()> {
     tracing::info!(ffmpeg = %app_media::ffmpeg_version(), "FFmpeg carregado");
     let gpu = Gpu::new().context("criando dispositivo D3D11")?;
     let (target, _, label) = target(args)?;
-    let capture = Capture::start(&gpu, target, cfg.video.fps).context("iniciando captura")?;
+    let mut capture = Capture::start(&gpu, target, cfg.video.fps, cfg.video.capture_backend)
+        .context("iniciando captura")?;
     let shared = capture.shared().clone();
     let (src_w, src_h) = session::first_frame_size(&shared)?;
     let (out_w, out_h) = cfg.video.resolution.output_size(src_w, src_h);
