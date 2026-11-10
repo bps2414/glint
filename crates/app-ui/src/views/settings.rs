@@ -410,7 +410,8 @@ impl Shell {
                 row(
                     tr("server.create"),
                     Some(tr("server.create_hint")),
-                    guide("srv-create", cx),
+                    btn("srv-create", BtnKind::Secondary, tr("server.create_button"))
+                        .on_click(cx.listener(|this, _, _, cx| this.open_create(cx))),
                 ),
             ];
         }
@@ -505,6 +506,9 @@ impl Shell {
             .as_ref()
             .filter(|i| app_cloud::update::is_newer(crate::updater::CURRENT, &i.server_version))
         {
+            // O app atualiza o que está em <worker>.<conta>.workers.dev; domínio próprio, pelo guia.
+            let host = url.split("://").nth(1).unwrap_or(&url).split('/').next();
+            let on_workers_dev = host.is_some_and(|h| h.ends_with(".workers.dev"));
             rows.push(row(
                 tr_args(
                     "server.outdated",
@@ -513,8 +517,17 @@ impl Shell {
                         ("app", crate::updater::CURRENT),
                     ],
                 ),
-                Some(tr("server.outdated_hint")),
-                guide("srv-update", cx),
+                Some(tr(if on_workers_dev {
+                    "server.outdated_hint"
+                } else {
+                    "server.outdated_hint_manual"
+                })),
+                if on_workers_dev {
+                    btn("srv-update", BtnKind::Primary, tr("server.update_button"))
+                        .on_click(cx.listener(|this, _, _, cx| this.open_update_server(cx)))
+                } else {
+                    guide("srv-update", cx)
+                },
             ));
         }
         rows

@@ -331,6 +331,15 @@ impl Client {
         Ok(Self::json::<TokenResp>(r)?.token)
     }
 
+    /// `POST /api/v1/setup`: cria o admin do servidor novo com o `SETUP_TOKEN` → token.
+    pub fn setup(&self, setup_token: &str, name: &str) -> Result<String> {
+        let r = self
+            .agent
+            .post(self.url("/api/v1/setup"))
+            .send_json(serde_json::json!({ "setup_token": setup_token, "name": name }))?;
+        Ok(Self::json::<TokenResp>(r)?.token)
+    }
+
     /// `POST /api/v1/devices/link/claim`: código do outro PC → token da mesma conta.
     pub fn claim_link(&self, code: &str) -> Result<String> {
         let r = self

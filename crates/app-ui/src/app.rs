@@ -101,6 +101,8 @@ pub struct Shell {
     inbox: Inbox,
     /// Janela "Entrar num servidor".
     pub join: Option<JoinView>,
+    /// Assistente "Criar meu servidor" / "Atualizar servidor".
+    pub create: Option<crate::views::create_server::CreateView>,
     /// Código de outro PC ou membros (abertos nas Configurações).
     pub server_modal: Option<ServerModal>,
     /// `GET /info` do servidor configurado.
@@ -160,6 +162,7 @@ impl Shell {
             update: UpdateState::None,
             inbox,
             join: None,
+            create: None,
             server_modal: None,
             server_info: None,
             admin: false,
@@ -779,6 +782,7 @@ impl Render for Shell {
         if self.clip.is_some() {
             let modal = self.clip_modal(cx);
             let join = self.join_modal(window, cx);
+            let create = self.create_modal(window, cx);
             return root
                 .relative()
                 .child(
@@ -793,7 +797,8 @@ impl Render for Shell {
                         .children(notice),
                 )
                 .children(modal)
-                .children(join);
+                .children(join)
+                .children(create);
         }
 
         let list = match self.screen {
@@ -810,6 +815,7 @@ impl Render for Shell {
         let welcome = self.welcome_modal(cx);
         let server_modal = self.server_modal_view(cx);
         let join = self.join_modal(window, cx);
+        let create = self.create_modal(window, cx);
         root.relative()
             .child(self.sidebar(cx))
             .child(
@@ -827,5 +833,6 @@ impl Render for Shell {
             .children(welcome)
             .children(server_modal)
             .children(join)
+            .children(create)
     }
 }

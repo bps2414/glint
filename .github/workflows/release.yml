@@ -41,6 +41,9 @@ jobs:
           $tag = "${{ github.ref_name }}"
           $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
           if ($tag -ne "v$version") { throw "a tag $tag não bate com a versão do Cargo.toml ($version)" }
+          # O servidor (server.json do release) leva a mesma versão do app.
+          $serverVersion = (Select-String -Path server/src/env.ts -Pattern 'SERVER_VERSION = "(.+)"').Matches[0].Groups[1].Value
+          if ($serverVersion -ne $version) { throw "SERVER_VERSION ($serverVersion) em server/src/env.ts não bate com $version" }
           "VERSION=$version" >> $env:GITHUB_ENV
           Write-Host "Versão $version"
 
@@ -143,13 +146,30 @@ jobs:
           [System.IO.File]::WriteAllText("$PWD\dist\latest.json", $json, [System.Text.UTF8Encoding]::new($false))
           Write-Host $json
 
+      # Pacote do servidor desta versão (server.json): o assistente "Criar meu servidor" do app
+      # baixa daqui e sobe pela API da Cloudflare (crates/app-cloud/src/cloudflare.rs).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Pacote do servidor
+        shell: pwsh
+        working-directory: server
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { throw "npm ci falhou" }
+          node scripts/bundle.mjs ..\dist\server.json
+          if ($LASTEXITCODE -ne 0) { throw "bundle do servidor falhou" }
+
       - name: Publicar release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "${{ github.ref_name }}"
-          $ghArgs = @("release", "create", $tag, "dist\$env:APP_NAME-Setup-$env:VERSION.exe", "dist\latest.json",
+          $ghArgs = @("release", "create", $tag, "dist\$env:APP_NAME-Setup-$env:VERSION.exe", "dist\latest.json", "dist\server.json",
                     "--title", "$env:APP_NAME $env:VERSION", "--latest", "--verify-tag")
           if ((Get-Item notes.md).Length -gt 0) { $ghArgs += @("--notes-file", "notes.md") } else { $ghArgs += "--generate-notes" }
           gh @ghArgs

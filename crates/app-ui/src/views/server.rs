@@ -16,7 +16,7 @@ use crate::theme::{tok, FONT_NUM, R_PANEL, R_SM};
 use crate::{tr, tr_args};
 
 /// Nome da conta: até 32 caracteres (mesma regra do servidor).
-const NAME_MAX: usize = 32;
+pub(super) const NAME_MAX: usize = 32;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum JoinMode {
@@ -59,7 +59,7 @@ enum Ask {
 }
 
 /// Nome do usuário do Windows (sugestão do nome da conta).
-fn os_user_name() -> String {
+pub(super) fn os_user_name() -> String {
     std::env::var("USERNAME")
         .or_else(|_| std::env::var("USER"))
         .unwrap_or_default()
@@ -239,7 +239,13 @@ impl Shell {
     }
 
     /// Guarda a conta nova: troca de servidor se preciso (desconectando a conta antiga).
-    fn connect(&mut self, server: String, info: ServerInfo, token: String, cx: &mut Context<Self>) {
+    pub(super) fn connect(
+        &mut self,
+        server: String,
+        info: ServerInfo,
+        token: String,
+        cx: &mut Context<Self>,
+    ) {
         if server != self.config.server_url {
             if let Some(j) = &self.job {
                 j.cancel();
@@ -665,7 +671,7 @@ impl Shell {
 }
 
 /// Véu escuro + cartão de base sólida centralizado (mesmo visual do primeiro uso).
-fn overlay(id: &'static str, w: f32, content: Div) -> AnyElement {
+pub(super) fn overlay(id: &'static str, w: f32, content: Div) -> AnyElement {
     div()
         .id(id)
         .absolute()
@@ -685,14 +691,14 @@ fn overlay(id: &'static str, w: f32, content: Div) -> AnyElement {
         .into_any_element()
 }
 
-fn title(text: SharedString) -> Div {
+pub(super) fn title(text: SharedString) -> Div {
     div()
         .text_size(px(19.))
         .font_weight(FontWeight::SEMIBOLD)
         .child(text)
 }
 
-fn hint(text: SharedString) -> Div {
+pub(super) fn hint(text: SharedString) -> Div {
     div()
         .text_size(px(12.))
         .line_height(px(17.))
@@ -700,7 +706,7 @@ fn hint(text: SharedString) -> Div {
         .child(text)
 }
 
-fn buttons(left: Btn, right: Btn) -> Div {
+pub(super) fn buttons(left: Btn, right: Btn) -> Div {
     div()
         .flex()
         .flex_row()

@@ -5,11 +5,13 @@
 //!   uma vez e troca o código pelo token.
 //! - [`publish`]: envio em partes de 8 MiB (com retomada), miniatura e conclusão.
 //! - [`invite`]: link de convite (`https://.../i/<código>` ou `glint://join`).
+//! - [`cloudflare`]: cria ou atualiza o servidor na conta Cloudflare do usuário (API REST).
 //! - [`update`]: versão mais nova do app e download do instalador (SHA-256 conferido).
 //!
 //! Tudo é bloqueante: a interface chama de uma thread de fundo.
 
 mod api;
+pub mod cloudflare;
 pub mod invite;
 pub mod login;
 mod publish;

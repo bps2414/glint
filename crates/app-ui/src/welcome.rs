@@ -135,8 +135,8 @@ impl Shell {
                                     .size(Size::Lg)
                                     .on_click(cx.listener(
                                         |this, _, _, cx| {
-                                            cx.open_url(crate::views::settings::DEPLOY_GUIDE_URL);
-                                            this.apply(|c| c.welcome_done = true, cx)
+                                            this.apply(|c| c.welcome_done = true, cx);
+                                            this.open_create(cx);
                                         },
                                     )),
                                 )
