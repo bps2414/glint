@@ -12,6 +12,8 @@ Include what you found, how to reproduce it, the affected version (or commit) an
 will acknowledge the report as soon as I can, keep you posted while I fix it, and credit you in the advisory
 if you want.
 
+Don't use the app's **Report bug** button for security problems: its message becomes a public GitHub issue.
+
 ## Scope
 
 - The Windows app (`glint`, `glint-recorder`) and the installer.

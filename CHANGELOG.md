@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Report a bug / send feedback:** Settings > Help (and **Report bug** in the tray) sends a message
+  straight to the maintainer, no GitHub account needed. The message and the PC info (app version,
+  Windows build, GPU, capture backend, language) become a public issue; the optional contact and the
+  recorder logs stay private. Logs are opt-in, cleaned of your user folder and tokens, and
+  **See what will be sent** shows the exact text first. **Leave a star** opens the repository.
+
 ## 1.0.0-rc.3
 
 - **Kill clips:** a second hotkey (**F9** by default) saves a short clip around the play instead of the

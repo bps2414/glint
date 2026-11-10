@@ -109,6 +109,12 @@ favorites and published clips never.
 **Is a published clip public?** By default it is "with the link": it only opens for people who have the
 address. You can switch to "only me" or "public" at any time, or delete it from the server.
 
+**How do I report a bug or send feedback?** Settings > Help > **Report bug** / **Send feedback**, or
+**Report bug** in the tray. No GitHub account needed. Your message and PC info (app version, Windows,
+GPU) become a public issue on GitHub; the contact you leave and the recorder logs (optional, with your
+user folder and tokens removed) stay private with the maintainer. **See what will be sent** shows the
+exact text before you send. Security problems go through [`SECURITY.md`](SECURITY.md), not this button.
+
 **Linux?** System code is isolated so it can happen later; today it is Windows only.
 
 ## Build from source

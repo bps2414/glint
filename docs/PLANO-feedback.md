@@ -57,7 +57,6 @@ Fica em `server/feedback/` (como `server/redirect/`: `index.ts` + `wrangler.json
 
 Feito: Worker no ar em `feedback.getglint.workers.dev` (D1 `glint-feedback`, R2 `glint-feedback`, rate limit, `ADMIN_TOKEN` guardado em `D:\Bryan\Dev\Data\glint-feedback\admin-token.txt`, labels `bug`/`feedback`/`from-app` no repo) e testado em produção (report salvo, log no R2, download com token). App: envio, coleta e limpeza dos logs, janela, seção Ajuda, item "Reportar bug" na bandeja (`glint://feedback?kind=bug`), textos EN/pt-BR.
 
-Falta:
-- `GITHUB_TOKEN` (fine-grained, só `bps2414/glint`, Issues: Read and write): `npx wrangler secret put GITHUB_TOKEN -c feedback/wrangler.jsonc` em `server/`. Sem ele os reports são salvos mas nenhuma issue é aberta.
-- Testar a janela de verdade: um bug e um feedback enviados pelo app, conferindo D1, R2 e a issue.
-- Docs (SECURITY, READMEs, CHANGELOG).
+Concluído: `GITHUB_TOKEN` (fine-grained, só `bps2414/glint`, Issues: Read and write) no Worker; um bug e um feedback enviados pelo código do app (`collect_logs` + `send_report`) com linha no D1 (com contato), log só no R2 (bug) e issues #1/#2 com labels certas, sem logs e sem contato (fechadas como teste); docs (SECURITY, READMEs, CHANGELOG).
+
+Não verificado: o clique na janela em si (o envio passou pelo mesmo código, sem a UI).

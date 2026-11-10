@@ -107,6 +107,13 @@ primeiro; favoritos e publicados nunca.
 **Meu clipe publicado é público?** Por padrão fica "com o link": só abre para quem tem o endereço. Dá
 para trocar para "só eu" ou "público" a qualquer momento, ou apagar do servidor.
 
+**Como reporto um bug ou mando feedback?** Configurações > Ajuda > **Reportar bug** / **Enviar
+feedback**, ou **Reportar bug** na bandeja. Não precisa de conta no GitHub. A mensagem e as informações
+do PC (versão do app, Windows, GPU) viram uma issue pública no GitHub; o contato que você deixar e os
+logs do gravador (opcionais, sem a pasta do seu usuário e sem tokens) ficam privados com o mantenedor.
+**Ver o que será enviado** mostra o texto exato antes de enviar. Falha de segurança vai pelo
+[`SECURITY.md`](SECURITY.md), não por esse botão.
+
 **E no Linux?** O código de sistema está isolado para isso ser possível no futuro; hoje é só Windows.
 
 ## Compilar do código
