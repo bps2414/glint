@@ -32,6 +32,8 @@
   on the server, favorites left out, and deletes only what you confirm before trying again; nothing is
   ever deleted on its own. Favorites now reach the server, and the publish panel reminds you to
   favorite the clips you want to keep. Needs the server updated to this version.
+- **Select several clips:** each library card has a checkbox (on hover, and on every card while
+  something is selected) to pick clips and publish them all as a queue, no Ctrl+click needed.
 - **Smaller published videos:** publishing uses the encoder's quality preset and fewer keyframes, about
   4% smaller files at the same quality.
 

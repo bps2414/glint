@@ -26,8 +26,10 @@ pub struct ClipCard {
     kill: Option<SharedString>,
     favorite: bool,
     hovered: bool,
-    /// Selecionado (Ctrl+clique): anel em volta da miniatura.
+    /// Selecionado (caixa de seleção ou Ctrl+clique): anel em volta da miniatura.
     selected: bool,
+    /// Há clipes selecionados na biblioteca: a caixa aparece em todos os cards.
+    selecting: bool,
     /// Clipe tocando sobre a miniatura (hover) e quanto já tocou (0..1).
     preview: Option<(AnyElement, f32)>,
     /// `Some(rótulo)` = publicado (rótulo do botão: "Copiar link" ou "Link copiado").
@@ -36,6 +38,7 @@ pub struct ClipCard {
     on_hover: Option<Handler<bool>>,
     on_favorite: Option<OnClick>,
     on_copy: Option<OnClick>,
+    on_select: Option<OnClick>,
 }
 
 impl ClipCard {
@@ -60,12 +63,14 @@ impl ClipCard {
             favorite: false,
             hovered: false,
             selected: false,
+            selecting: false,
             preview: None,
             link: None,
             on_click: None,
             on_hover: None,
             on_favorite: None,
             on_copy: None,
+            on_select: None,
         }
     }
 
@@ -107,6 +112,17 @@ impl ClipCard {
         self
     }
 
+    pub fn selecting(mut self, selecting: bool) -> Self {
+        self.selecting = selecting;
+        self
+    }
+
+    /// Caixa de seleção no canto da miniatura (marca para publicar vários de uma vez).
+    pub fn on_select(mut self, f: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static) -> Self {
+        self.on_select = Some(Rc::new(f));
+        self
+    }
+
     /// Clipe publicado: mostra o botão de copiar o link (`done` = acabou de copiar).
     pub fn link(mut self, label: impl Into<SharedString>, done: bool) -> Self {
         self.link = Some((label.into(), done));
@@ -138,6 +154,15 @@ impl RenderOnce for ClipCard {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let hovered = self.hovered;
         let fav = self.favorite;
+        let selected = self.selected;
+        // A caixa aparece no hover, marcada, ou em todos enquanto há seleção.
+        let check = self.on_select.is_some() && (hovered || selected || self.selecting);
+        // O selo de cima ("Publicado", "Enviando") anda para o lado da caixa.
+        let badge_left = if check {
+            8. + 6. + f32::from(Size::Xs.h())
+        } else {
+            8.
+        };
         let (preview_video, progress) = match self.preview {
             Some((v, t)) => (Some(v), Some(t)),
             None => (None, None),
@@ -188,11 +213,17 @@ impl RenderOnce for ClipCard {
                     .when(self.selected, |d| d.border_2().border_color(tok::blue())),
             )
             .when_some(self.badge, |d, (kind, label)| {
-                d.child(div().absolute().left(px(8.)).top(px(8.)).child(Badge {
-                    kind,
-                    label,
-                    backdrop: backdrop.clone(),
-                }))
+                d.child(
+                    div()
+                        .absolute()
+                        .left(px(badge_left))
+                        .top(px(8.))
+                        .child(Badge {
+                            kind,
+                            label,
+                            backdrop: backdrop.clone(),
+                        }),
+                )
             })
             .when_some(self.kill, |d, label| {
                 d.child(div().absolute().left(px(8.)).bottom(px(8.)).child(Badge {
@@ -200,6 +231,40 @@ impl RenderOnce for ClipCard {
                     label,
                     backdrop: backdrop.clone(),
                 }))
+            })
+            .when(check, |d| {
+                let base = if selected {
+                    div().bg(tok::blue()).rounded(Size::Xs.h() / 2.)
+                } else {
+                    glass::chip_on(backdrop.clone())
+                };
+                d.child(
+                    base.id("select")
+                        .absolute()
+                        .left(px(8.))
+                        .top(px(8.))
+                        .size(Size::Xs.h())
+                        .px_0()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .cursor_pointer()
+                        .when(!selected, |d| d.hover(|s| s.bg(rgba(0x141418a6))))
+                        .when(selected, |d| {
+                            d.child(
+                                svg()
+                                    .path(icon::CHECK)
+                                    .size(Size::Xs.icon())
+                                    .text_color(tok::on_media()),
+                            )
+                        })
+                        .when_some(self.on_select, |d, f| {
+                            d.on_click(move |e, w, cx| {
+                                cx.stop_propagation();
+                                f(e, w, cx)
+                            })
+                        }),
+                )
             })
             .when(fav || hovered, |d| {
                 let star = svg()

@@ -177,6 +177,8 @@ impl Shell {
         .favorite(c.favorite)
         .hovered(self.hovered == Some(id))
         .selected(self.selected.contains(&id))
+        .selecting(!self.selected.is_empty())
+        .on_select(cx.listener(move |this, _, _, cx| this.toggle_selected(id, cx)))
         .on_hover(cx.listener(move |this, on: &bool, w, cx| this.set_hover(id, *on, w, cx)))
         .on_favorite(cx.listener(move |this, _, _, cx| this.toggle_favorite(id, cx)))
         .on_click(cx.listener(move |this, ev: &ClickEvent, window, cx| {
