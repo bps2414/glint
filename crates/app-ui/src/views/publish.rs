@@ -18,7 +18,7 @@ use app_media::ExportOptions;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
-use crate::app::{Screen, Shell};
+use crate::app::Shell;
 use crate::assets::icon;
 use crate::components::{field_label, glass, input_box, Btn, BtnKind, Segmented, Toggle};
 use crate::exporter::{Export, State as ExportState};
@@ -68,12 +68,9 @@ impl Shell {
         !self.config.server_url.trim().is_empty()
     }
 
-    /// Sem servidor: leva para as Configurações, onde se coloca o endereço.
-    pub fn open_server_settings(&mut self, notice: bool, cx: &mut Context<Self>) {
-        self.go(Screen::Settings, self.filter.clone(), cx);
-        if notice {
-            self.notify_user(tr("publish.no_server_notice"), cx);
-        }
+    /// Sem servidor: abre "Entrar num servidor" (o link do convite traz o endereço).
+    pub fn ask_server(&mut self, cx: &mut Context<Self>) {
+        self.open_join(None, cx);
     }
 
     fn publishing(&self) -> bool {
@@ -151,7 +148,7 @@ impl Shell {
     /// Botão "Publicar" (e "Tentar de novo"). Com outro clipe enviando, entra na fila.
     pub fn publish_clicked(&mut self, cx: &mut Context<Self>) {
         if !self.has_server() {
-            self.open_server_settings(true, cx);
+            self.ask_server(cx);
             return;
         }
         let Some((id, vis)) = self.clip.as_ref().map(|v| (v.id, v.vis)) else {
@@ -184,7 +181,7 @@ impl Shell {
     /// Publica os clipes selecionados na biblioteca (os já publicados ficam de fora).
     pub fn publish_selected(&mut self, cx: &mut Context<Self>) {
         if !self.has_server() {
-            self.open_server_settings(true, cx);
+            self.ask_server(cx);
             return;
         }
         let ids: Vec<i64> = self
@@ -395,7 +392,7 @@ impl Shell {
         clip_id_from_url(url).map(str::to_string)
     }
 
-    fn client(&self) -> Option<Client> {
+    pub(crate) fn client(&self) -> Option<Client> {
         if !self.has_server() {
             return None;
         }
@@ -952,7 +949,7 @@ impl Shell {
                     )
                     .size(Size::Lg)
                     .full_width()
-                    .on_click(cx.listener(|this, _, _, cx| this.open_server_settings(false, cx))),
+                    .on_click(cx.listener(|this, _, _, cx| this.ask_server(cx))),
                 )
                 .into_any_element();
         }

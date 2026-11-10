@@ -1,4 +1,4 @@
-//! Primeiro uso: três passos curtos por cima da biblioteca, uma vez só
+//! Primeiro uso: quatro passos curtos por cima da biblioteca, uma vez só
 //! (`Config::welcome_done`).
 
 use gpui_kit::*;
@@ -103,14 +103,53 @@ impl Shell {
                             tr_args("welcome.step2", &[("secs", &secs), ("kill", &kill_key)]),
                         ))
                         .child(step("3", tr("welcome.step3_title"), tr("welcome.step3")))
-                        .child(
+                        .child(step("4", tr("welcome.step4_title"), tr("welcome.step4")))
+                        .child(if self.token.is_some() {
                             Btn::new("welcome-ok", BtnKind::Primary, tr("welcome.start"))
                                 .size(Size::Lg)
                                 .full_width()
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.apply(|c| c.welcome_done = true, cx)
-                                })),
-                        ),
+                                }))
+                                .into_any_element()
+                        } else {
+                            // Entrar / Criar / Pular: qualquer um fecha o primeiro uso.
+                            div()
+                                .flex()
+                                .flex_row()
+                                .gap(px(8.))
+                                .child(
+                                    Btn::new("welcome-skip", BtnKind::Ghost, tr("welcome.skip"))
+                                        .size(Size::Lg)
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.apply(|c| c.welcome_done = true, cx)
+                                        })),
+                                )
+                                .child(div().flex_1())
+                                .child(
+                                    Btn::new(
+                                        "welcome-create",
+                                        BtnKind::Secondary,
+                                        tr("welcome.create"),
+                                    )
+                                    .size(Size::Lg)
+                                    .on_click(cx.listener(
+                                        |this, _, _, cx| {
+                                            cx.open_url(crate::views::settings::DEPLOY_GUIDE_URL);
+                                            this.apply(|c| c.welcome_done = true, cx)
+                                        },
+                                    )),
+                                )
+                                .child(
+                                    Btn::new("welcome-join", BtnKind::Primary, tr("welcome.join"))
+                                        .size(Size::Lg)
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.apply(|c| c.welcome_done = true, cx);
+                                            this.open_join(None, cx);
+                                        })),
+                                )
+                                .into_any_element()
+                        }),
                 )
                 .into_any_element(),
         )

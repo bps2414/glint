@@ -5,4 +5,5 @@ pub mod glass_test;
 pub mod library;
 pub mod player_test;
 pub mod publish;
+pub mod server;
 pub mod settings;

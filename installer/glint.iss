@@ -59,6 +59,12 @@ Filename: "{app}\{#RecExe}"; Parameters: "--quit"; Flags: runhidden waituntilter
 [Registry]
 ; Desinstalar tira o "iniciar com o Windows" que o gravador criou.
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "{#AppName}"; Flags: uninsdeletevalue dontcreatekey
+; Links glint:// (botão "Abrir no Glint" da página de convite): o app recebe o link como argumento
+; e, se já estiver aberto, passa para a janela aberta.
+Root: HKCU; Subkey: "Software\Classes\glint"; ValueType: string; ValueName: ""; ValueData: "URL:{#AppName}"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\glint"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\glint\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"",0"
+Root: HKCU; Subkey: "Software\Classes\glint\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"" ""%1"""
 
 [Code]
 // Antes de copiar: fecha o gravador pelo IPC (ele segura as DLLs) e o app.

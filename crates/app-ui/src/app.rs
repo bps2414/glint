@@ -19,6 +19,7 @@ use crate::components::{Btn, BtnKind, GameItem, NavItem, RecStatus, SearchField,
 use crate::data::{self, Filter, Sort, Store};
 use crate::exporter::Export;
 use crate::format;
+use crate::instance::Inbox;
 use crate::player::audio::MAX_TRACKS;
 use crate::player::{AudioOut, VideoPlayer};
 use crate::publisher::Job;
@@ -31,6 +32,7 @@ use crate::thumbs::{self, Thumbs};
 use crate::updater::UpdateState;
 use crate::views::clip::ClipView;
 use crate::views::publish::Queued;
+use crate::views::server::{JoinView, ServerModal};
 use crate::views::settings::SettingsView;
 use crate::{tr, tr_args};
 
@@ -95,10 +97,25 @@ pub struct Shell {
     pub pointer_at: Instant,
     /// Versão nova do app (card na sidebar).
     pub update: UpdateState,
+    /// Links de outras execuções do app (instância única).
+    inbox: Inbox,
+    /// Janela "Entrar num servidor".
+    pub join: Option<JoinView>,
+    /// Código de outro PC ou membros (abertos nas Configurações).
+    pub server_modal: Option<ServerModal>,
+    /// `GET /info` do servidor configurado.
+    pub server_info: Option<app_cloud::ServerInfo>,
+    /// A conta é admin do servidor (convidar, membros).
+    pub admin: bool,
 }
 
 impl Shell {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        inbox: Inbox,
+        link: Option<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let search = cx.new(|cx| InputState::new(window, cx).placeholder(tr("top.search")));
         cx.subscribe(&search, |_, _, ev: &InputEvent, cx| {
             if matches!(ev, InputEvent::Change) {
@@ -141,13 +158,43 @@ impl Shell {
             account: None,
             pointer_at: Instant::now(),
             update: UpdateState::None,
+            inbox,
+            join: None,
+            server_modal: None,
+            server_info: None,
+            admin: false,
         };
         this.watch_updates(cx);
         this.load_thumbs(cx);
         this.fetch_account(cx);
         this.poll_recorder(window, cx);
         this.follow_look(window, cx);
+        this.watch_inbox(window, cx);
+        if let Some(l) = link {
+            this.open_link(&l, cx);
+        }
         this
+    }
+
+    /// Outra execução do app passou a vez: traz a janela e abre o link, se veio um.
+    fn watch_inbox(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        cx.spawn_in(window, async move |this, cx| loop {
+            cx.background_executor()
+                .timer(Duration::from_millis(250))
+                .await;
+            let alive = this.update_in(cx, |t, window, cx| {
+                while let Some(link) = t.inbox.try_next() {
+                    window.activate_window();
+                    if let Some(l) = link {
+                        t.open_link(&l, cx);
+                    }
+                }
+            });
+            if alive.is_err() {
+                break;
+            }
+        })
+        .detach();
     }
 
     /// Tema claro/escuro e transparência seguem o Windows sem reiniciar.
@@ -731,6 +778,7 @@ impl Render for Shell {
         // desenhada; o player redesenha a cada quadro).
         if self.clip.is_some() {
             let modal = self.clip_modal(cx);
+            let join = self.join_modal(window, cx);
             return root
                 .relative()
                 .child(
@@ -744,7 +792,8 @@ impl Render for Shell {
                         .child(self.clip_screen(window, cx))
                         .children(notice),
                 )
-                .children(modal);
+                .children(modal)
+                .children(join);
         }
 
         let list = match self.screen {
@@ -759,6 +808,8 @@ impl Render for Shell {
             .child(list);
 
         let welcome = self.welcome_modal(cx);
+        let server_modal = self.server_modal_view(cx);
+        let join = self.join_modal(window, cx);
         root.relative()
             .child(self.sidebar(cx))
             .child(
@@ -774,5 +825,7 @@ impl Render for Shell {
                     .children(notice),
             )
             .children(welcome)
+            .children(server_modal)
+            .children(join)
     }
 }

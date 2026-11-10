@@ -56,6 +56,11 @@ pub enum Request {
     Shutdown,
     /// Mesmo efeito da hotkey de kill (um aperto).
     SaveKill,
+    /// Para a interface (socket [`ui_socket_name`]): outra execução do app passa a vez
+    /// para a janela aberta, com o link `glint://` que recebeu (se houver).
+    Activate {
+        link: Option<String>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -144,6 +149,12 @@ pub fn socket_name_for(slug: &str) -> String {
         .take(32)
         .collect();
     format!("{slug}-recorder-{user}")
+}
+
+/// Nome do socket da interface: a segunda execução do app manda [`Request::Activate`] para
+/// a primeira e fecha (instância única da janela).
+pub fn ui_socket_name() -> String {
+    socket_name_for(app_core::brand::APP_SLUG).replace("-recorder-", "-ui-")
 }
 
 fn ns_name(name: &str) -> io::Result<Name<'_>> {

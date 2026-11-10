@@ -358,6 +358,7 @@ impl Daemon {
                 self.quit = true;
                 Response::Ok
             }
+            Request::Activate { .. } => Response::Error("pedido da interface".into()),
         }
     }
 

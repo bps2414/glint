@@ -20,6 +20,7 @@ mod components;
 mod data;
 mod exporter;
 mod format;
+mod instance;
 mod og;
 mod player;
 mod publisher;
@@ -57,7 +58,8 @@ pub fn tr_args(key: &str, args: &[(&str, &str)]) -> SharedString {
 
 /// Modo de abertura escolhido pela linha de comando.
 enum Mode {
-    App,
+    /// `link`: `glint://...` que o Windows passou ao abrir o app por um link.
+    App { link: Option<String> },
     PlayerTest {
         path: Option<PathBuf>,
         hw: HwPreference,
@@ -74,6 +76,7 @@ fn parse_args(args: impl Iterator<Item = String>) -> Mode {
     let mut hw = HwPreference::Auto;
     let mut path = None;
     let mut auto = None;
+    let mut link = None;
     let mut args = args.peekable();
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -81,6 +84,12 @@ fn parse_args(args: impl Iterator<Item = String>) -> Mode {
             "--glass-test" => glass_test = true,
             "--sw" => hw = HwPreference::Off,
             "--auto" => auto = args.next().map(PathBuf::from),
+            _ if a
+                .get(..8)
+                .is_some_and(|p| p.eq_ignore_ascii_case("glint://")) =>
+            {
+                link = Some(a)
+            }
             _ if !a.starts_with("--") && !a.is_empty() => path = Some(PathBuf::from(a)),
             _ => {}
         }
@@ -90,7 +99,7 @@ fn parse_args(args: impl Iterator<Item = String>) -> Mode {
     } else if player_test {
         Mode::PlayerTest { path, hw, auto }
     } else {
-        Mode::App
+        Mode::App { link }
     }
 }
 
@@ -108,21 +117,27 @@ fn main() {
     rust_i18n::set_locale(app_core::ui_locale(sys_locale::get_locale().as_deref()));
     let mode = parse_args(std::env::args().skip(1));
     app_media::init_logging();
-    if matches!(mode, Mode::App) {
+    let mut inbox = None;
+    if let Mode::App { link } = &mode {
+        // Janela já aberta: ela recebe o link e esta execução fecha.
+        match instance::claim(link.clone()) {
+            Some(i) => inbox = Some(i),
+            None => return,
+        }
         // Dados do nome antigo (Clipe → Glint), 1× (o gravador também tenta; um lock separa os dois).
         app_ipc::legacy::migrate();
     }
 
     gpui_kit::application()
         .with_assets(assets::Assets)
-        .run(|cx| {
+        .run(move |cx| {
             gpui_kit::init(cx);
             if let Err(e) = theme::install(cx) {
                 eprintln!("tema: {e:#}");
             }
 
             let (title, min) = match &mode {
-                Mode::App => (
+                Mode::App { .. } => (
                     SharedString::from(brand::APP_NAME),
                     size(px(960.), px(640.)),
                 ),
@@ -155,10 +170,13 @@ fn main() {
                 ..Default::default()
             };
             match mode {
-                Mode::App => gpui_kit::open_window(options, cx, |window, cx| {
-                    theme::refresh(window, cx);
-                    cx.new(|cx| app::Shell::new(window, cx))
-                })
+                Mode::App { link } => {
+                    let inbox = inbox.take().expect("instância da janela");
+                    gpui_kit::open_window(options, cx, move |window, cx| {
+                        theme::refresh(window, cx);
+                        cx.new(|cx| app::Shell::new(inbox, link, window, cx))
+                    })
+                }
                 .map(|_| ()),
                 Mode::GlassTest => gpui_kit::open_window(options, cx, |window, cx| {
                     let look = theme::Look {
@@ -206,7 +224,11 @@ mod tests {
     #[test]
     fn argumentos_do_teste_do_player() {
         let args = |v: &[&str]| super::parse_args(v.iter().map(|s| s.to_string()));
-        assert!(matches!(args(&[]), super::Mode::App));
+        assert!(matches!(args(&[]), super::Mode::App { link: None }));
+        match args(&["glint://join?s=x&i=y"]) {
+            super::Mode::App { link } => assert_eq!(link.as_deref(), Some("glint://join?s=x&i=y")),
+            _ => panic!("esperava o app"),
+        }
         assert!(matches!(args(&["--glass-test"]), super::Mode::GlassTest));
         match args(&["--player-test", "C:\\clipes\\a.mp4", "--sw"]) {
             super::Mode::PlayerTest { path, hw, .. } => {

@@ -77,3 +77,12 @@ pub fn foreground() -> Option<WindowInfo> {
         info(hwnd)
     }
 }
+
+/// Deixa qualquer processo trazer a própria janela para a frente (a segunda execução do app
+/// chama antes de passar a vez para a janela aberta; sem isso o Windows só pisca na barra).
+pub fn allow_foreground() {
+    // ASFW_ANY
+    unsafe {
+        let _ = windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow(u32::MAX);
+    }
+}

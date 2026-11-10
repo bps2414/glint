@@ -18,10 +18,12 @@ use crate::recorder;
 use crate::secret;
 use crate::theme::size::Size;
 use crate::theme::{tok, R_PANEL_SM};
+use crate::views::server::ServerModal;
 use crate::{tr, tr_args};
 
 /// Guia para subir o próprio servidor.
-const DEPLOY_GUIDE_URL: &str = "https://github.com/bps2414/glint/blob/main/docs/DEPLOY.md";
+pub(crate) const DEPLOY_GUIDE_URL: &str =
+    "https://github.com/bps2414/glint/blob/main/docs/DEPLOY.md";
 
 const BUFFERS: [u32; 4] = [15, 30, 60, 120];
 const RESOLUTIONS: [Resolution; 3] = [Resolution::P720, Resolution::P1080, Resolution::Native];
@@ -117,25 +119,40 @@ impl Shell {
         }
     }
 
-    /// Pergunta o nome da conta ao servidor (para "Conectado como X").
+    /// Pergunta ao servidor o nome dele (`/info`) e, com conta, o nome e o papel
+    /// (para "Você é X" e as ações de admin).
     pub fn fetch_account(&mut self, cx: &mut Context<Self>) {
-        let Some(token) = self.token.clone().filter(|_| self.has_server()) else {
+        if !self.has_server() {
             return;
-        };
+        }
+        let token = self.token.clone();
         let base = self.config.server_url.clone();
         cx.spawn(async move |this, cx| {
-            let me = cx
+            let (info, me) = cx
                 .background_executor()
-                .spawn(async move { Client::new(&base, Some(token)).me() })
+                .spawn(async move {
+                    let info = Client::new(&base, None).info();
+                    let me = token.map(|t| Client::new(&base, Some(t)).me());
+                    (info, me)
+                })
                 .await;
             let _ = this.update(cx, |t, cx| {
+                match info {
+                    Ok(i) => t.server_info = Some(i),
+                    Err(e) => tracing::warn!("servidor: {e}"),
+                }
                 match me {
-                    Ok(m) => t.account = Some(m.name().to_string()),
-                    Err(app_cloud::CloudError::Unauthorized) => {
+                    Some(Ok(m)) => {
+                        t.account = Some(m.name().to_string());
+                        t.admin = m.user.is_admin();
+                    }
+                    Some(Err(app_cloud::CloudError::Unauthorized)) => {
                         secret::delete();
                         t.token = None;
+                        t.admin = false;
                     }
-                    Err(e) => tracing::warn!("conta: {e}"),
+                    Some(Err(e)) => tracing::warn!("conta: {e}"),
+                    None => {}
                 }
                 cx.notify();
             });
@@ -365,7 +382,142 @@ impl Shell {
         }
         secret::delete();
         self.account = None;
+        self.admin = false;
         cx.notify();
+    }
+
+    /// Linhas da seção Servidor: entrar/criar sem servidor; com conta, quem você é e as
+    /// ações (convidar, membros, outro PC, sair).
+    fn server_rows(&self, cx: &mut Context<Self>) -> Vec<Div> {
+        let btn = |id: &'static str, kind: BtnKind, label: SharedString| {
+            Btn::new(id, kind, label).size(Size::Sm)
+        };
+        let join = |kind: BtnKind, cx: &mut Context<Self>| {
+            btn("srv-join", kind, tr("server.join_button"))
+                .on_click(cx.listener(|this, _, _, cx| this.open_join(None, cx)))
+        };
+        let guide = |id: &'static str, cx: &mut Context<Self>| {
+            btn(id, BtnKind::Secondary, tr("settings.open_guide"))
+                .on_click(cx.listener(|_, _, _, cx| cx.open_url(DEPLOY_GUIDE_URL)))
+        };
+        if !self.has_server() {
+            return vec![
+                row(
+                    tr("server.join"),
+                    Some(tr("server.join_hint")),
+                    join(BtnKind::Primary, cx),
+                ),
+                row(
+                    tr("server.create"),
+                    Some(tr("server.create_hint")),
+                    guide("srv-create", cx),
+                ),
+            ];
+        }
+        let url = self.config.server_url.clone();
+        let name: SharedString = self
+            .server_info
+            .as_ref()
+            .map(|i| i.name.clone())
+            .unwrap_or_else(|| url.split("://").nth(1).unwrap_or(&url).to_string())
+            .into();
+        let leave = |kind: BtnKind, label: &str, cx: &mut Context<Self>| {
+            btn("srv-leave", kind, tr(label)).on_click(cx.listener(|this, _, _, cx| {
+                this.server_modal = Some(ServerModal::ConfirmLeave);
+                cx.notify();
+            }))
+        };
+        let mut rows = Vec::new();
+        if self.settings.as_ref().is_some_and(|s| s.login.is_some()) {
+            rows.push(row(
+                tr("publish.login"),
+                Some(tr("publish.login_hint")),
+                btn("acc-cancel", BtnKind::Secondary, tr("clip.cancel")).on_click(cx.listener(
+                    |this, _, _, _| {
+                        if let Some(c) = this.settings.as_ref().and_then(|s| s.login.clone()) {
+                            c.store(true, Ordering::Relaxed);
+                        }
+                    },
+                )),
+            ));
+        } else if self.token.is_some() {
+            let who = self.account.as_ref().map(|n| {
+                tr_args(
+                    if self.admin {
+                        "server.you_are_admin"
+                    } else {
+                        "server.you_are"
+                    },
+                    &[("name", n)],
+                )
+            });
+            rows.push(row(
+                name,
+                Some(who.unwrap_or_else(|| url.clone().into())),
+                leave(BtnKind::Secondary, "server.leave", cx),
+            ));
+            if self.admin {
+                rows.push(row(
+                    tr("server.invite"),
+                    Some(tr("server.invite_hint")),
+                    btn("srv-invite", BtnKind::Primary, tr("server.invite_button"))
+                        .on_click(cx.listener(|this, _, _, cx| this.invite_friend(cx))),
+                ));
+                rows.push(row(
+                    tr("server.members"),
+                    Some(tr("server.members_hint")),
+                    btn(
+                        "srv-members",
+                        BtnKind::Secondary,
+                        tr("server.members_button"),
+                    )
+                    .on_click(cx.listener(|this, _, _, cx| this.open_members(cx))),
+                ));
+            }
+            rows.push(row(
+                tr("server.link"),
+                Some(tr("server.link_row_hint")),
+                btn("srv-link", BtnKind::Secondary, tr("server.link_button"))
+                    .on_click(cx.listener(|this, _, _, cx| this.link_other_pc(cx))),
+            ));
+        } else {
+            rows.push(row(
+                name,
+                Some(tr("server.signed_out_hint")),
+                leave(BtnKind::Ghost, "server.forget", cx),
+            ));
+            rows.push(row(
+                tr("server.join"),
+                Some(tr("server.join_again_hint")),
+                join(BtnKind::Primary, cx),
+            ));
+            if self.server_info.as_ref().is_some_and(|i| i.discord_login) {
+                rows.push(row(
+                    tr("settings.signed_out"),
+                    None,
+                    btn("acc-in", BtnKind::Secondary, tr("settings.sign_in"))
+                        .on_click(cx.listener(|this, _, _, cx| this.sign_in(cx))),
+                ));
+            }
+        }
+        if let Some(i) = self
+            .server_info
+            .as_ref()
+            .filter(|i| app_cloud::update::is_newer(crate::updater::CURRENT, &i.server_version))
+        {
+            rows.push(row(
+                tr_args(
+                    "server.outdated",
+                    &[
+                        ("server", &i.server_version),
+                        ("app", crate::updater::CURRENT),
+                    ],
+                ),
+                Some(tr("server.outdated_hint")),
+                guide("srv-update", cx),
+            ));
+        }
+        rows
     }
 
     // ---------- desenho ----------
@@ -374,6 +526,7 @@ impl Shell {
     /// linhas agrupadas num painel de vidro (rótulo à esquerda, controle à direita).
     pub fn settings_screen(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         self.open_settings(window, cx);
+        let server_rows = self.server_rows(cx);
         let s = self.settings.as_ref().expect("configurações abertas");
         let c = &self.config;
         let buf = BUFFERS.iter().position(|&b| b == c.buffer_secs);
@@ -393,44 +546,6 @@ impl Shell {
                 None,
                 Toggle::new(id, on).on_click(cx.listener(move |this, _, _, cx| this.apply(f, cx))),
             )
-        };
-
-        let account: Div = match (&self.token, s) {
-            _ if !self.has_server() => row(
-                tr("settings.no_server"),
-                Some(tr("settings.no_server_hint")),
-                Btn::new("acc-guide", BtnKind::Secondary, tr("settings.open_guide"))
-                    .size(Size::Sm)
-                    .on_click(cx.listener(|_, _, _, cx| cx.open_url(DEPLOY_GUIDE_URL))),
-            ),
-            (_, SettingsView { login: Some(_), .. }) => row(
-                tr("publish.login"),
-                Some(tr("publish.login_hint")),
-                Btn::new("acc-cancel", BtnKind::Secondary, tr("clip.cancel"))
-                    .size(Size::Sm)
-                    .on_click(cx.listener(|this, _, _, _| {
-                        if let Some(c) = this.settings.as_ref().and_then(|s| s.login.clone()) {
-                            c.store(true, Ordering::Relaxed);
-                        }
-                    })),
-            ),
-            (Some(_), _) => row(
-                self.account
-                    .as_ref()
-                    .map(|n| tr_args("settings.signed_in", &[("name", n)]))
-                    .unwrap_or_else(|| tr("settings.signed_in_unknown")),
-                None,
-                Btn::new("acc-out", BtnKind::Secondary, tr("settings.sign_out"))
-                    .size(Size::Sm)
-                    .on_click(cx.listener(|this, _, _, cx| this.sign_out(cx))),
-            ),
-            (None, _) => row(
-                tr("settings.signed_out"),
-                None,
-                Btn::new("acc-in", BtnKind::Primary, tr("settings.sign_in"))
-                    .size(Size::Sm)
-                    .on_click(cx.listener(|this, _, _, cx| this.sign_in(cx))),
-            ),
         };
 
         let seg = |e: Segmented| div().flex_none().w(px(SEG_W)).child(e);
@@ -661,8 +776,9 @@ impl Shell {
                     ),
                 ],
             ))
+            .child(section(tr("settings.server"), server_rows))
             .child(section(
-                tr("settings.server"),
+                tr("settings.server_advanced"),
                 vec![stacked(
                     tr("settings.server_url"),
                     Some(tr("settings.server_hint")),
@@ -676,7 +792,6 @@ impl Shell {
                         }),
                 )],
             ))
-            .child(section(tr("settings.account"), vec![account]))
             .into_any_element()
     }
 }

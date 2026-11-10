@@ -47,9 +47,65 @@ pub struct NewClip {
 
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct User {
+    /// Nome no servidor (conta por convite). Servidor antigo não manda.
+    #[serde(default)]
+    pub name: Option<String>,
     pub username: String,
     pub display_name: Option<String>,
     pub avatar_url: Option<String>,
+    /// `"admin"` ou `"user"`.
+    #[serde(default)]
+    pub role: Option<String>,
+}
+
+impl User {
+    pub fn is_admin(&self) -> bool {
+        self.role.as_deref() == Some("admin")
+    }
+}
+
+/// `GET /api/v1/info`.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+pub struct ServerInfo {
+    pub name: String,
+    pub server_version: String,
+    pub api_version: u32,
+    #[serde(default)]
+    pub discord_login: bool,
+    #[serde(default)]
+    pub setup_required: bool,
+}
+
+/// Versão da API que este app fala.
+pub const API_VERSION: u32 = 1;
+
+/// Aparelho (sessão) de um membro.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+pub struct Device {
+    pub id: String,
+    /// `"app"` ou `"web"`.
+    pub kind: String,
+    pub last_used_at: i64,
+    pub current: bool,
+}
+
+/// Membro do servidor (`GET /api/v1/members`, só admin).
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+pub struct Member {
+    pub id: String,
+    #[serde(flatten)]
+    pub user: User,
+    pub disabled: bool,
+    pub used_bytes: u64,
+    pub clips: u32,
+    pub devices: Vec<Device>,
+}
+
+/// Código curto para entrar com a mesma conta em outro PC.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+pub struct LinkCode {
+    pub code: String,
+    pub expires_at: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize)]
@@ -67,9 +123,10 @@ pub struct Me {
 impl Me {
     pub fn name(&self) -> &str {
         self.user
-            .display_name
+            .name
             .as_deref()
             .filter(|n| !n.is_empty())
+            .or(self.user.display_name.as_deref().filter(|n| !n.is_empty()))
             .unwrap_or(&self.user.username)
     }
 }
@@ -165,6 +222,22 @@ struct GetResp {
 struct TokenResp {
     token: String,
 }
+#[derive(Deserialize)]
+struct InviteWrap {
+    invite: InviteUrl,
+}
+#[derive(Deserialize)]
+struct InviteUrl {
+    url: String,
+}
+#[derive(Deserialize)]
+struct MembersResp {
+    members: Vec<Member>,
+}
+#[derive(Deserialize)]
+struct UrlResp {
+    url: String,
+}
 
 impl Client {
     pub fn new(base: &str, token: Option<String>) -> Self {
@@ -241,6 +314,91 @@ impl Client {
             .post(self.url("/api/v1/auth/token"))
             .send_json(serde_json::json!({ "code": code, "verifier": verifier }))?;
         Ok(Self::json::<TokenResp>(r)?.token)
+    }
+
+    /// `GET /api/v1/info` (público).
+    pub fn info(&self) -> Result<ServerInfo> {
+        let r = self.agent.get(self.url("/api/v1/info")).call()?;
+        Self::json(r)
+    }
+
+    /// `POST /api/v1/join`: gasta o convite (código ou link) e cria a conta → token.
+    pub fn join(&self, invite: &str, name: &str) -> Result<String> {
+        let r = self
+            .agent
+            .post(self.url("/api/v1/join"))
+            .send_json(serde_json::json!({ "invite": invite, "name": name }))?;
+        Ok(Self::json::<TokenResp>(r)?.token)
+    }
+
+    /// `POST /api/v1/devices/link/claim`: código do outro PC → token da mesma conta.
+    pub fn claim_link(&self, code: &str) -> Result<String> {
+        let r = self
+            .agent
+            .post(self.url("/api/v1/devices/link/claim"))
+            .send_json(serde_json::json!({ "code": code }))?;
+        Ok(Self::json::<TokenResp>(r)?.token)
+    }
+
+    /// `POST /api/v1/devices/link`: código para entrar em outro PC (10 min, uso único).
+    pub fn link_code(&self) -> Result<LinkCode> {
+        let r = self
+            .agent
+            .post(self.url("/api/v1/devices/link"))
+            .header("Authorization", &self.auth()?)
+            .send_empty()?;
+        Self::json(r)
+    }
+
+    /// `POST /api/v1/auth/web-code`: link de uso único que abre o site já logado em `next`.
+    pub fn web_url(&self, next: &str) -> Result<String> {
+        let r = self
+            .agent
+            .post(self.url("/api/v1/auth/web-code"))
+            .header("Authorization", &self.auth()?)
+            .send_json(serde_json::json!({ "next": next }))?;
+        Ok(Self::json::<UrlResp>(r)?.url)
+    }
+
+    /// `POST /api/v1/invites` (admin): convite padrão (uso único, 7 dias) → link.
+    pub fn create_invite(&self) -> Result<String> {
+        let r = self
+            .agent
+            .post(self.url("/api/v1/invites"))
+            .header("Authorization", &self.auth()?)
+            .send_json(serde_json::json!({}))?;
+        Ok(Self::json::<InviteWrap>(r)?.invite.url)
+    }
+
+    /// `GET /api/v1/members` (admin).
+    pub fn members(&self) -> Result<Vec<Member>> {
+        let r = self
+            .agent
+            .get(self.url("/api/v1/members"))
+            .header("Authorization", &self.auth()?)
+            .call()?;
+        Ok(Self::json::<MembersResp>(r)?.members)
+    }
+
+    /// Desativa (`false`) ou reativa (`true`) um membro (admin).
+    pub fn set_member_enabled(&self, id: &str, enabled: bool) -> Result<()> {
+        let action = if enabled { "enable" } else { "disable" };
+        let r = self
+            .agent
+            .post(self.url(&format!("/api/v1/members/{id}/{action}")))
+            .header("Authorization", &self.auth()?)
+            .send_empty()?;
+        Self::check(r).map(|_| ())
+    }
+
+    /// Revoga um aparelho (sessão) de um membro (admin).
+    pub fn revoke_device(&self, member: &str, device: &str) -> Result<()> {
+        let r = self
+            .agent
+            .delete(self.url(&format!("/api/v1/members/{member}/devices/{device}")))
+            .header("Authorization", &self.auth()?)
+            .call()?;
+        Self::check(r).map(|_| ())
     }
 
     pub fn logout(&self) -> Result<()> {
