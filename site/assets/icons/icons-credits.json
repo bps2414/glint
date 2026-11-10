@@ -1,0 +1,119 @@
+[
+  {
+    "file": "amd.svg",
+    "icon": "logos:amd",
+    "name": "AMD",
+    "kind": "colour",
+    "source": "gilbarbara/logos@d6960edc1b7309d392c76e40d3a320df7f9ff85c",
+    "author": "Gil Barbara",
+    "licence": "CC0-1.0",
+    "url": "https://github.com/gilbarbara/logos",
+    "trademark": true,
+    "markUrl": "https://www.amd.com/"
+  },
+  {
+    "file": "cloudflare-workers.svg",
+    "icon": "logos:cloudflare-workers-icon",
+    "name": "Cloudflare Workers",
+    "kind": "colour",
+    "source": "gilbarbara/logos@d6960edc1b7309d392c76e40d3a320df7f9ff85c",
+    "author": "Gil Barbara",
+    "licence": "CC0-1.0",
+    "url": "https://github.com/gilbarbara/logos",
+    "trademark": true,
+    "markUrl": "https://workers.cloudflare.com/"
+  },
+  {
+    "file": "discord.svg",
+    "icon": "logos:discord-icon",
+    "name": "Discord",
+    "kind": "colour",
+    "source": "gilbarbara/logos@d6960edc1b7309d392c76e40d3a320df7f9ff85c",
+    "author": "Gil Barbara",
+    "licence": "CC0-1.0",
+    "url": "https://github.com/gilbarbara/logos",
+    "trademark": true,
+    "markUrl": "https://discordapp.com/"
+  },
+  {
+    "file": "github.svg",
+    "icon": "logos:github-icon",
+    "name": "GitHub",
+    "kind": "colour",
+    "source": "gilbarbara/logos@d6960edc1b7309d392c76e40d3a320df7f9ff85c",
+    "author": "Gil Barbara",
+    "licence": "CC0-1.0",
+    "url": "https://github.com/gilbarbara/logos",
+    "trademark": true,
+    "markUrl": "https://github.com/"
+  },
+  {
+    "file": "intel.svg",
+    "icon": "logos:intel",
+    "name": "Intel",
+    "kind": "colour",
+    "source": "gilbarbara/logos@d6960edc1b7309d392c76e40d3a320df7f9ff85c",
+    "author": "Gil Barbara",
+    "licence": "CC0-1.0",
+    "url": "https://github.com/gilbarbara/logos",
+    "trademark": true,
+    "markUrl": "https://www.intel.com"
+  },
+  {
+    "file": "nvidia.svg",
+    "icon": "logos:nvidia",
+    "name": "Nvidia",
+    "kind": "colour",
+    "source": "gilbarbara/logos@d6960edc1b7309d392c76e40d3a320df7f9ff85c",
+    "author": "Gil Barbara",
+    "licence": "CC0-1.0",
+    "url": "https://github.com/gilbarbara/logos",
+    "trademark": true,
+    "markUrl": "https://www.nvidia.com/"
+  },
+  {
+    "file": "ui-clapperboard.svg",
+    "icon": "ui:clapperboard",
+    "name": "Clapperboard",
+    "kind": "line",
+    "source": "@iconify-json/lucide@1.2.100",
+    "author": "Lucide Contributors",
+    "licence": "ISC",
+    "url": "https://github.com/lucide-icons/lucide",
+    "trademark": false
+  },
+  {
+    "file": "ui-database.svg",
+    "icon": "ui:database",
+    "name": "Database",
+    "kind": "line",
+    "source": "@iconify-json/lucide@1.2.100",
+    "author": "Lucide Contributors",
+    "licence": "ISC",
+    "url": "https://github.com/lucide-icons/lucide",
+    "trademark": false
+  },
+  {
+    "file": "ui-hard-drive.svg",
+    "icon": "ui:hard-drive",
+    "name": "Hard Drive",
+    "kind": "line",
+    "source": "@iconify-json/lucide@1.2.100",
+    "author": "Lucide Contributors",
+    "licence": "ISC",
+    "url": "https://github.com/lucide-icons/lucide",
+    "trademark": false
+  },
+  {
+    "file": "windows.svg",
+    "icon": "logos:microsoft-windows-icon",
+    "name": "Windows",
+    "kind": "colour",
+    "source": "gilbarbara/logos@d6960edc1b7309d392c76e40d3a320df7f9ff85c",
+    "author": "Gil Barbara",
+    "licence": "CC0-1.0",
+    "url": "https://github.com/gilbarbara/logos",
+    "trademark": true,
+    "markUrl": "https://www.microsoft.com/windows"
+  }
+]

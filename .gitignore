@@ -6,3 +6,7 @@
 
 # Documentos internos (só locais)
 /docs/interno/
+
+# design-taste-frontend working files
+site/.taste-skill/
+site/shots/
