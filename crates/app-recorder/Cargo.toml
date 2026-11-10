@@ -24,6 +24,8 @@ embed-resource = "=3.0.12"
 app-media.workspace = true
 app-platform-win.workspace = true
 app-ipc.workspace = true
+# Só `update` (atualização em segundo plano, ver src/autoupdate.rs).
+app-cloud.workspace = true
 rust-i18n = "4"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 ctrlc = "3"

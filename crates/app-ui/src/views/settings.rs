@@ -858,7 +858,7 @@ fn set_kill_secs(k: &mut KillConfig, field: Field, n: u32) {
 }
 
 /// Mesma combinação de teclas, escrita de qualquer jeito ("ctrl+F9" = "F9+Ctrl").
-fn same_hotkey(a: &str, b: &str) -> bool {
+pub(crate) fn same_hotkey(a: &str, b: &str) -> bool {
     let norm = |s: &str| {
         let mut parts: Vec<String> = s.split('+').map(|p| p.trim().to_uppercase()).collect();
         parts.sort();

@@ -32,17 +32,31 @@ pub struct Release {
 /// release (404). O `latest` do GitHub ignora pre-releases, então o CI publica sempre como
 /// release normal.
 pub fn latest_release(repo: &str) -> Result<Option<Release>> {
-    fetch_latest(&format!(
-        "https://github.com/{repo}/releases/latest/download/latest.json"
-    ))
+    latest_release_within(repo, Duration::from_secs(30))
+}
+
+/// Variável de ambiente com a URL de um `latest.json` no lugar do GitHub (só para testar a
+/// atualização com um servidor local).
+pub const FEED_ENV: &str = "GLINT_UPDATE_FEED";
+
+/// [`latest_release`] com prazo total `timeout` (a abertura do app não pode esperar 30 s).
+/// Respeita [`FEED_ENV`].
+pub fn latest_release_within(repo: &str, timeout: Duration) -> Result<Option<Release>> {
+    let url = std::env::var(FEED_ENV)
+        .ok()
+        .filter(|u| !u.trim().is_empty())
+        .unwrap_or_else(|| {
+            format!("https://github.com/{repo}/releases/latest/download/latest.json")
+        });
+    fetch_latest(&url, timeout)
 }
 
 /// Baixa e lê um `latest.json` (segue os redirects do GitHub; 404 = sem versão).
-fn fetch_latest(url: &str) -> Result<Option<Release>> {
+fn fetch_latest(url: &str, timeout: Duration) -> Result<Option<Release>> {
     let agent: Agent = Agent::config_builder()
         .http_status_as_error(false)
-        .timeout_connect(Some(Duration::from_secs(15)))
-        .timeout_global(Some(Duration::from_secs(30)))
+        .timeout_connect(Some(timeout.min(Duration::from_secs(15))))
+        .timeout_global(Some(timeout))
         .build()
         .into();
     let mut resp = agent.get(url).call()?;
@@ -163,6 +177,9 @@ mod tests {
     use sha2::{Digest, Sha256};
     use std::io::{BufRead, BufReader, Write};
     use std::net::TcpListener;
+    use std::time::Duration;
+
+    const T: Duration = Duration::from_secs(5);
 
     #[test]
     fn compara_versoes() {
@@ -231,7 +248,10 @@ mod tests {
             .map(|b| format!("{b:02x}"))
             .collect();
         let none = server(Vec::new(), None);
-        assert_eq!(fetch_latest(&format!("{none}/latest.json")).unwrap(), None);
+        assert_eq!(
+            fetch_latest(&format!("{none}/latest.json"), T).unwrap(),
+            None
+        );
 
         let base = server(data.clone(), None);
         let json = format!(
@@ -239,14 +259,15 @@ mod tests {
             data.len()
         );
         let base2 = server(data.clone(), Some(json));
-        let rel: Release = fetch_latest(&format!("{base2}/latest.json"))
+        let rel: Release = fetch_latest(&format!("{base2}/latest.json"), T)
             .unwrap()
             .unwrap();
         assert_eq!(rel.version, "0.2.0");
         // Pelo link "latest" do GitHub (com redirect).
-        let via: Release = fetch_latest(&format!("{base2}/releases/latest/download/latest.json"))
-            .unwrap()
-            .unwrap();
+        let via: Release =
+            fetch_latest(&format!("{base2}/releases/latest/download/latest.json"), T)
+                .unwrap()
+                .unwrap();
         assert_eq!(via, rel);
 
         let dir = std::env::temp_dir().join(format!("update-test-{}", std::process::id()));

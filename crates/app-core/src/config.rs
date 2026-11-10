@@ -239,7 +239,11 @@ pub struct Config {
     /// Mostra "Clipping with Glint" e o tempo no perfil do Discord (Rich Presence) enquanto o
     /// gravador está aberto. Não precisa de servidor nem de login.
     pub discord_presence: bool,
-    /// Já viu a tela de boas-vindas (primeiro uso).
+    /// Versão do onboarding já concluída (ou pulada). Menor que a do app = mostra o onboarding
+    /// de novo; config sem o campo (1.0.x ou instalação nova) = 0.
+    pub onboarding: u32,
+    /// Boas-vindas da 1.0.x (só lido): `true` = quem atualizou, não instalação nova.
+    #[serde(default, skip_serializing)]
     pub welcome_done: bool,
     /// Marca d'água (símbolo + "glint") no vídeo exportado/publicado; o clipe original
     /// nunca muda. Cada clipe pode trocar no painel Publicar.
@@ -264,6 +268,7 @@ impl Default for Config {
             server_url: String::new(),
             check_updates: true,
             discord_presence: true,
+            onboarding: 0,
             welcome_done: false,
             watermark: false,
             watermark_corner: Corner::BottomRight,
@@ -414,6 +419,28 @@ mod tests {
         assert_eq!(kill.kill.pre_secs, 12);
         assert_eq!(kill.kill.post_secs, 2);
         assert_eq!(kill.kill.combo_secs, 6);
+    }
+
+    #[test]
+    fn onboarding_from_old_config() {
+        // Config da 1.0.x: sem `onboarding`, com `welcome_done`.
+        let old: Config = toml::from_str(
+            "welcome_done = true
+",
+        )
+        .unwrap();
+        assert_eq!(old.onboarding, 0);
+        assert!(old.welcome_done);
+        // `welcome_done` não é mais gravado; `onboarding` sim.
+        let saved = toml::to_string_pretty(&Config {
+            onboarding: 2,
+            ..old
+        })
+        .unwrap();
+        assert!(!saved.contains("welcome_done"));
+        let back: Config = toml::from_str(&saved).unwrap();
+        assert_eq!(back.onboarding, 2);
+        assert!(!back.welcome_done);
     }
 
     #[test]

@@ -110,7 +110,7 @@ interface UploadState {
 ### `GET /api/v1/info` (público)
 
 ```json
-{ "name": "Glint", "server_version": "1.0.0-rc.3", "api_version": 1, "discord_login": false, "setup_required": false }
+{ "name": "Glint", "server_version": "1.1.0", "api_version": 1, "discord_login": false, "setup_required": false }
 ```
 
 `name` = `SERVER_NAME` (ou o nome do app). `setup_required`: servidor sem usuários esperando o `POST /setup`.

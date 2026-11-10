@@ -59,10 +59,20 @@ guarda o lance quando você aperta F8 e transforma o clipe num link que toca dir
 
 1. Baixe o instalador mais recente em [GitHub Releases](https://github.com/bps2414/glint/releases/latest)
    e execute (instala só para o seu usuário, sem pedir administrador).
-2. O gravador sobe na bandeja e fica esperando um jogo. Clique no ícone da bandeja, ou abra o Glint, para
-   ver a biblioteca.
-3. Opcional: Configurações → Sistema → **Iniciar com o Windows**. As atualizações são oferecidas dentro do
-   app.
+2. O Glint abre uma configuração rápida: suas teclas (aperte para conferir que o gravador ouviu), a
+   qualidade (ele testa o que a sua placa de vídeo grava e recomenda um nível), entrar num servidor e as
+   opções do Windows. Cada passo grava na hora, e **Pular configuração** fica com os valores
+   recomendados. Quem atualiza de uma versão anterior passa por ela uma vez; conta e configurações
+   ficam como estavam.
+3. Depois o gravador fica na bandeja esperando um jogo. Clique no ícone da bandeja, ou abra o Glint,
+   para ver a biblioteca.
+
+**Atualizações.** Quando o Glint abre com o gravador fechado, um launcher pequeno procura versão nova
+antes (5 s no máximo, e pula se estiver sem internet), instala, sobe o gravador e abre a biblioteca. O
+gravador, que inicia com o Windows, também baixa versões novas em segundo plano e só instala quando nada
+está acontecendo: sem jogo, sem gravação e com a janela do Glint fechada. Os dois desligam em
+Configurações → Sistema → **Procurar atualizações sozinho** (o botão das Configurações continua procurando na
+hora).
 
 **Aviso do SmartScreen.** O instalador ainda não tem assinatura de código, então o Windows pode mostrar
 "O Windows protegeu o computador". Clique em **Mais informações → Executar assim mesmo**. O código está
@@ -73,9 +83,10 @@ aqui e os releases são gerados pelo CI a partir de tags; a assinatura está nos
 O Glint funciona 100% local, sem conta e sem servidor: gravar, recortar, exportar MP4.
 
 Para ter um link que toca no Discord, você sobe o seu próprio servidor pequeno no plano grátis da
-Cloudflare (um Worker com D1 e R2). Não existe servidor compartilhado: cada pessoa ou grupo faz o seu
-deploy e cola a URL em Configurações → Servidor (até lá o botão Publicar mostra "Conectar servidor"). O
-login é só pelo Discord; quem entrar primeiro num servidor novo vira admin e os demais precisam de convite.
+Cloudflare (um Worker com D1 e R2). Não existe servidor compartilhado: cada pessoa ou grupo tem o seu.
+Para entrar no servidor de um amigo, cole o link do convite que ele mandou (na configuração inicial ou
+em Configurações → Servidor): o convite vira a sua conta, sem login. Para ter o seu, **Criar meu
+servidor** no app sobe tudo na sua conta grátis da Cloudflare e já te conecta como admin.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/bps2414/glint/tree/main/server)
 

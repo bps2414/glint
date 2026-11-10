@@ -1,7 +1,26 @@
 # Changelog
 
-## Unreleased
+## 1.1.0
 
+- **New setup:** a full-screen setup on first open (and once after updating, keeping your account and
+  settings): hotkeys you set by pressing them, with a live test that lights up when the recorder hears
+  F8/F9 and warns if another app owns the key; quality levels (Light, Balanced, Maximum) recommended
+  from what your graphics card can actually encode, plus game sound and microphone with a level meter;
+  joining a server by pasting the invite; and Windows options. **Skip setup** keeps the recommended
+  values.
+- **Launcher:** opening Glint with everything closed shows a small splash that checks for an update
+  (5 s at most, skipped offline), installs it, starts the recorder and opens the library with the
+  thumbnails already loaded.
+- **Background updates:** the recorder downloads new versions on its own and installs them only when
+  nothing is happening (no game, no recording, Glint window closed). Settings > System > Check for
+  updates automatically turns this off.
+- **Join with an invite:** an invite link becomes your account on a friend's server, no Discord sign-in
+  needed; **I have a code from another PC** connects a second PC to the same account. Admins invite,
+  list members and remove devices from Settings > Server.
+- **Create your server from the app:** a wizard deploys the server to your free Cloudflare account and
+  connects you as admin; it also updates the server when the app is newer.
+- **Windows 10:** recording no longer shows the yellow capture border.
+- **Tray:** Quit always closes the recorder, even if a capture is stuck.
 - **Report a bug / send feedback:** Settings > Help (and **Report bug** in the tray) sends a message
   straight to the maintainer, no GitHub account needed. The message and the PC info (app version,
   Windows build, GPU, capture backend, language) become a public issue; the optional contact and the

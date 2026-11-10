@@ -91,7 +91,7 @@ pub fn collect_logs(dir: &Path) -> String {
         })
         .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
         .collect();
-    files.sort_by(|a, b| b.0.cmp(&a.0));
+    files.sort_by_key(|a| std::cmp::Reverse(a.0));
     let mut out = String::new();
     for (_, path) in files.into_iter().take(2).rev() {
         let Ok(bytes) = std::fs::read(&path) else {

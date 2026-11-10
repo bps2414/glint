@@ -16,7 +16,7 @@ use interprocess::local_socket::{prelude::*, GenericNamespaced, ListenerOptions,
 use serde::{Deserialize, Serialize};
 
 /// Muda quando o formato das mensagens muda de forma incompatível.
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: u32 = 3;
 
 /// Maior mensagem aceita (protege contra lixo no pipe).
 pub const MAX_FRAME: usize = 1 << 20;
@@ -105,6 +105,11 @@ pub struct RecorderStatus {
     pub hotkey_ok: bool,
     pub kill_hotkey: String,
     pub kill_hotkey_ok: bool,
+    /// Apertos da hotkey de salvar desde que o gravador subiu, gravando ou não (teste do
+    /// onboarding).
+    pub save_presses: u64,
+    /// Idem, hotkey de kill.
+    pub kill_presses: u64,
     pub disk_used_bytes: u64,
     pub disk_limit_bytes: u64,
 }
@@ -127,6 +132,8 @@ impl Default for RecorderStatus {
             hotkey_ok: true,
             kill_hotkey: String::new(),
             kill_hotkey_ok: true,
+            save_presses: 0,
+            kill_presses: 0,
             disk_used_bytes: 0,
             disk_limit_bytes: 0,
         }

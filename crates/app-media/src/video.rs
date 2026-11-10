@@ -26,6 +26,42 @@ pub fn hw_candidates(codec: Codec) -> &'static [&'static str] {
     }
 }
 
+/// Encoders de hardware que abrem de verdade nesta GPU (tenta cada candidato de
+/// [`hw_candidates`] em 1080p, com quadros NV12 na memória). Lento (centenas de ms por
+/// encoder): chamar fora da thread da UI.
+pub fn available_encoders() -> Vec<&'static str> {
+    let mut ok = Vec::new();
+    for codec in [Codec::Hevc, Codec::H264] {
+        let settings = VideoSettings {
+            codec,
+            width: 1920,
+            height: 1080,
+            fps: 60,
+            bitrate_kbps: 25_000,
+            gop: 60,
+        };
+        for &name in hw_candidates(codec) {
+            if find_encoder(name).is_none() {
+                continue;
+            }
+            // SAFETY: sem contexto de hardware; o encoder é solto logo em seguida.
+            let r = unsafe {
+                VideoEncoder::open(
+                    name,
+                    &settings,
+                    ff::AVPixelFormat::AV_PIX_FMT_NV12,
+                    ptr::null_mut(),
+                )
+            };
+            match r {
+                Ok(_) => ok.push(name),
+                Err(e) => tracing::info!("encoder {name} não abriu nesta GPU: {e}"),
+            }
+        }
+    }
+    ok
+}
+
 pub(crate) fn find_encoder(name: &str) -> Option<*const ff::AVCodec> {
     let cname = CString::new(name).ok()?;
     let codec = unsafe { ff::avcodec_find_encoder_by_name(cname.as_ptr()) };

@@ -29,7 +29,7 @@ export interface Bindings {
 }
 
 /** Versão do servidor (acompanha o app, Cargo.toml) e da API que ele fala. */
-export const SERVER_VERSION = "1.0.0-rc.3";
+export const SERVER_VERSION = "1.1.0";
 export const API_VERSION = 1;
 
 export interface User {

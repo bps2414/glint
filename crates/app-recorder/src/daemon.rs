@@ -6,6 +6,7 @@
 //! a detecção de jogo, confere a saúde da sessão e atualiza o estado.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -46,6 +47,8 @@ enum Event {
     Tray(TrayCommand),
     Ipc(Request, Sender<Response>),
     Saved(SaveOutcome),
+    /// Instalador de versão nova pronto: instala se estiver tudo ocioso (`true` = abriu).
+    TryInstall(PathBuf, Sender<bool>),
 }
 
 pub fn run(autostart_launch: bool) -> Result<()> {
@@ -108,7 +111,20 @@ pub fn run(autostart_launch: bool) -> Result<()> {
         }
     };
 
+    let updates = Arc::new(AtomicBool::new(cfg.check_updates));
+    {
+        let tx = tx.clone();
+        crate::autoupdate::start(updates.clone(), move |setup| {
+            let (rtx, rrx) = std::sync::mpsc::channel();
+            if tx.send(Event::TryInstall(setup, rtx)).is_err() {
+                return false;
+            }
+            rrx.recv_timeout(Duration::from_secs(30)).unwrap_or(false)
+        });
+    }
+
     let mut d = Daemon {
+        updates,
         detector: GameDetector::new(&cfg.game),
         presence: Presence::start(cfg.discord_presence),
         auto_detect: cfg.game.auto_detect,
@@ -130,6 +146,7 @@ pub fn run(autostart_launch: bool) -> Result<()> {
         pending_kill: None,
         status,
         clips_saved: 0,
+        presses: [0; 2],
         last_clip: None,
         disk_used: 0,
         last_status_log: Instant::now(),
@@ -212,10 +229,14 @@ struct Daemon {
     pending_kill: Option<PendingKill>,
     status: Arc<Mutex<RecorderStatus>>,
     clips_saved: u64,
+    /// Apertos de cada hotkey (`HOTKEY_SAVE`, `HOTKEY_KILL`), gravando ou não.
+    presses: [u64; 2],
     last_clip: Option<PathBuf>,
     disk_used: u64,
     last_status_log: Instant,
     quit: bool,
+    /// `check_updates` para a thread de atualização.
+    updates: Arc<AtomicBool>,
 }
 
 impl Daemon {
@@ -260,9 +281,18 @@ impl Daemon {
 
     fn handle(&mut self, ev: Event) {
         match ev {
-            Event::Hotkey(HOTKEY_KILL) => self.kill_press(),
-            Event::Hotkey(_) => self.save_clip(),
+            Event::Hotkey(HOTKEY_KILL) => {
+                self.presses[HOTKEY_KILL] += 1;
+                self.kill_press()
+            }
+            Event::Hotkey(_) => {
+                self.presses[HOTKEY_SAVE] += 1;
+                self.save_clip()
+            }
             Event::Tray(cmd) => self.tray_command(cmd),
+            Event::TryInstall(setup, reply) => {
+                let _ = reply.send(self.try_install(&setup));
+            }
             Event::Ipc(req, reply) => {
                 let resp = self.ipc(req);
                 let _ = reply.send(resp);
@@ -550,6 +580,31 @@ impl Daemon {
         }
     }
 
+    /// Abre o instalador em segundo plano se nada estiver acontecendo: sem gravação nem jogo,
+    /// sem clipe de kill pendente e com a janela do app fechada (o instalador fecha o app).
+    fn try_install(&self, setup: &std::path::Path) -> bool {
+        let busy = self.session.is_some()
+            || self.manual
+            || self.pending_kill.is_some()
+            || self.detector.current().is_some();
+        let ui_open = app_ipc::Client::connect_to(&app_ipc::ui_socket_name()).is_ok();
+        if busy || ui_open {
+            tracing::info!(
+                gravando = busy,
+                janela = ui_open,
+                "atualização: esperando ficar ocioso"
+            );
+            return false;
+        }
+        match shell::spawn_detached(setup, crate::autoupdate::INSTALLER_ARGS) {
+            Ok(()) => true,
+            Err(e) => {
+                tracing::warn!("atualização: abrir o instalador: {e}");
+                false
+            }
+        }
+    }
+
     fn save_config(&self) {
         if let Err(e) = self.cfg.save(&self.cfg_path) {
             tracing::warn!("não foi possível salvar a config: {e}");
@@ -565,6 +620,7 @@ impl Daemon {
         if cfg.discord_presence != self.cfg.discord_presence {
             self.presence.set_enabled(cfg.discord_presence);
         }
+        self.updates.store(cfg.check_updates, Ordering::Relaxed);
         self.cfg = cfg;
         if hotkey_changed {
             self.register_hotkey();
@@ -879,6 +935,8 @@ impl Daemon {
             hotkey_ok: self.hotkey_ok[HOTKEY_SAVE],
             kill_hotkey: self.cfg.kill.hotkey.clone(),
             kill_hotkey_ok: self.hotkey_ok[HOTKEY_KILL],
+            save_presses: self.presses[HOTKEY_SAVE],
+            kill_presses: self.presses[HOTKEY_KILL],
             disk_used_bytes: self.disk_used,
             disk_limit_bytes: self.cfg.disk_limit_bytes(),
             ..RecorderStatus::default()

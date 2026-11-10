@@ -32,7 +32,6 @@ mod trim;
 mod updater;
 mod views;
 mod watermark;
-mod welcome;
 
 use std::path::PathBuf;
 
@@ -59,7 +58,11 @@ pub fn tr_args(key: &str, args: &[(&str, &str)]) -> SharedString {
 /// Modo de abertura escolhido pela linha de comando.
 enum Mode {
     /// `link`: `glint://...` que o Windows passou ao abrir o app por um link.
-    App { link: Option<String> },
+    /// `from_installer`: aberto pelo instalador no fim (splash sem procurar atualização).
+    App {
+        link: Option<String>,
+        from_installer: bool,
+    },
     PlayerTest {
         path: Option<PathBuf>,
         hw: HwPreference,
@@ -77,12 +80,14 @@ fn parse_args(args: impl Iterator<Item = String>) -> Mode {
     let mut path = None;
     let mut auto = None;
     let mut link = None;
+    let mut from_installer = false;
     let mut args = args.peekable();
     while let Some(a) = args.next() {
         match a.as_str() {
             "--player-test" => player_test = true,
             "--glass-test" => glass_test = true,
             "--sw" => hw = HwPreference::Off,
+            "--from-installer" => from_installer = true,
             "--auto" => auto = args.next().map(PathBuf::from),
             _ if a
                 .get(..8)
@@ -99,7 +104,10 @@ fn parse_args(args: impl Iterator<Item = String>) -> Mode {
     } else if player_test {
         Mode::PlayerTest { path, hw, auto }
     } else {
-        Mode::App { link }
+        Mode::App {
+            link,
+            from_installer,
+        }
     }
 }
 
@@ -113,12 +121,49 @@ fn newest_clip() -> Option<PathBuf> {
         .find(|p| p.exists())
 }
 
+/// Janela principal do app (barra de título própria sobre o acrílico).
+pub(crate) fn app_window_options(cx: &mut App) -> WindowOptions {
+    let bounds = Bounds::centered(None, size(px(1280.), px(820.)), cx);
+    WindowOptions {
+        window_bounds: Some(WindowBounds::Windowed(bounds)),
+        window_min_size: Some(size(px(960.), px(640.))),
+        titlebar: Some(TitlebarOptions {
+            title: Some(SharedString::from(brand::APP_NAME)),
+            appears_transparent: true,
+            ..Default::default()
+        }),
+        window_background: WindowBackgroundAppearance::Blurred,
+        app_id: Some(brand::APP_SLUG.into()),
+        ..Default::default()
+    }
+}
+
+/// Splash do launcher: pequeno, sem barra de título, fixo e centralizado (aparece na barra
+/// de tarefas).
+fn splash_window_options(cx: &mut App) -> WindowOptions {
+    let bounds = Bounds::centered(None, size(px(320.), px(380.)), cx);
+    WindowOptions {
+        window_bounds: Some(WindowBounds::Windowed(bounds)),
+        titlebar: Some(TitlebarOptions {
+            title: Some(SharedString::from(brand::APP_NAME)),
+            appears_transparent: true,
+            ..Default::default()
+        }),
+        is_resizable: false,
+        is_minimizable: false,
+        window_background: WindowBackgroundAppearance::Blurred,
+        app_id: Some(brand::APP_SLUG.into()),
+        ..Default::default()
+    }
+}
+
 fn main() {
     rust_i18n::set_locale(app_core::ui_locale(sys_locale::get_locale().as_deref()));
     let mode = parse_args(std::env::args().skip(1));
     app_media::init_logging();
     let mut inbox = None;
-    if let Mode::App { link } = &mode {
+    let mut splash = false;
+    if let Mode::App { link, .. } = &mode {
         // Janela já aberta: ela recebe o link e esta execução fecha.
         match instance::claim(link.clone()) {
             Some(i) => inbox = Some(i),
@@ -126,6 +171,14 @@ fn main() {
         }
         // Dados do nome antigo (Clipe → Glint), 1× (o gravador também tenta; um lock separa os dois).
         app_ipc::legacy::migrate();
+        // Abertura fria (gravador fechado) ou vindo do instalador: launcher antes da janela.
+        splash = views::splash::wanted(matches!(
+            mode,
+            Mode::App {
+                from_installer: true,
+                ..
+            }
+        ));
     }
 
     gpui_kit::application()
@@ -170,11 +223,24 @@ fn main() {
                 ..Default::default()
             };
             match mode {
-                Mode::App { link } => {
+                Mode::App {
+                    link,
+                    from_installer,
+                } if splash => {
                     let inbox = inbox.take().expect("instância da janela");
-                    gpui_kit::open_window(options, cx, move |window, cx| {
+                    gpui_kit::open_window(splash_window_options(cx), cx, move |window, cx| {
                         theme::refresh(window, cx);
-                        cx.new(|cx| app::Shell::new(inbox, link, window, cx))
+                        cx.new(|cx| {
+                            views::splash::Splash::new(inbox, link, from_installer, window, cx)
+                        })
+                    })
+                    .map(|_| ())
+                }
+                Mode::App { link, .. } => {
+                    let inbox = inbox.take().expect("instância da janela");
+                    gpui_kit::open_window(app_window_options(cx), cx, move |window, cx| {
+                        theme::refresh(window, cx);
+                        cx.new(|cx| app::Shell::new(inbox, link, None, window, cx))
                     })
                 }
                 .map(|_| ()),
@@ -224,9 +290,24 @@ mod tests {
     #[test]
     fn argumentos_do_teste_do_player() {
         let args = |v: &[&str]| super::parse_args(v.iter().map(|s| s.to_string()));
-        assert!(matches!(args(&[]), super::Mode::App { link: None }));
+        assert!(matches!(
+            args(&[]),
+            super::Mode::App {
+                link: None,
+                from_installer: false
+            }
+        ));
+        assert!(matches!(
+            args(&["--from-installer"]),
+            super::Mode::App {
+                from_installer: true,
+                ..
+            }
+        ));
         match args(&["glint://join?s=x&i=y"]) {
-            super::Mode::App { link } => assert_eq!(link.as_deref(), Some("glint://join?s=x&i=y")),
+            super::Mode::App { link, .. } => {
+                assert_eq!(link.as_deref(), Some("glint://join?s=x&i=y"))
+            }
             _ => panic!("esperava o app"),
         }
         assert!(matches!(args(&["--glass-test"]), super::Mode::GlassTest));

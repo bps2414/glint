@@ -111,12 +111,31 @@ pub struct Shell {
     pub server_info: Option<app_cloud::ServerInfo>,
     /// A conta é admin do servidor (convidar, membros).
     pub admin: bool,
+    /// Onboarding em tela cheia (primeira abertura de cada versão do onboarding).
+    pub onboarding: Option<crate::views::onboarding::Onboarding>,
+    /// Pulou o onboarding antes do teste dos encoders terminar: grava o nível recomendado
+    /// quando o teste acabar.
+    pub pending_preset: bool,
+}
+
+/// O que o launcher (splash) já carregou antes de abrir a janela.
+pub struct Preloaded {
+    pub config: Config,
+    pub store: Store,
+    /// Miniaturas da primeira tela.
+    pub thumbs: Vec<(std::path::PathBuf, thumbs::Thumb)>,
+    pub server_info: Option<app_cloud::ServerInfo>,
+    /// Conta (nome, admin) quando o servidor respondeu a tempo.
+    pub account: Option<(String, bool)>,
+    /// O token salvo foi recusado (desconectar).
+    pub unauthorized: bool,
 }
 
 impl Shell {
     pub fn new(
         inbox: Inbox,
         link: Option<String>,
+        pre: Option<Preloaded>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -127,13 +146,34 @@ impl Shell {
             }
         })
         .detach();
-        let config = Config::load_or_create(&Config::default_path()).unwrap_or_default();
+        let (config, store, pre) = match pre {
+            Some(p) => {
+                let Preloaded {
+                    config,
+                    store,
+                    thumbs,
+                    server_info,
+                    account,
+                    unauthorized,
+                } = p;
+                (
+                    config,
+                    store,
+                    Some((thumbs, server_info, account, unauthorized)),
+                )
+            }
+            None => (
+                Config::load_or_create(&Config::default_path()).unwrap_or_default(),
+                Store::open(),
+                None,
+            ),
+        };
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         let mut this = Self {
             screen: Screen::Library,
             focus,
-            store: Store::open(),
+            store,
             thumbs: Thumbs::default(),
             filter: Filter::All,
             sort: Sort::Newest,
@@ -169,13 +209,34 @@ impl Shell {
             server_modal: None,
             server_info: None,
             admin: false,
+            onboarding: None,
+            pending_preset: false,
         };
         this.watch_updates(cx);
+        let mut fetched = false;
+        if let Some((thumbs, info, account, unauthorized)) = pre {
+            for (path, t) in thumbs {
+                this.thumbs.insert(path, t);
+            }
+            fetched = info.is_some() && (account.is_some() || this.token.is_none());
+            this.server_info = info;
+            if let Some((name, admin)) = account {
+                this.account = Some(name);
+                this.admin = admin;
+            }
+            if unauthorized {
+                secret::delete();
+                this.token = None;
+            }
+        }
         this.load_thumbs(cx);
-        this.fetch_account(cx);
+        if !fetched {
+            this.fetch_account(cx);
+        }
         this.poll_recorder(window, cx);
         this.follow_look(window, cx);
         this.watch_inbox(window, cx);
+        this.start_onboarding(window, cx);
         if let Some(l) = link {
             this.open_link(&l, cx);
         }
@@ -240,7 +301,7 @@ impl Shell {
         .detach();
     }
 
-    fn on_status(&mut self, st: Option<RecorderStatus>, cx: &mut Context<Self>) {
+    pub(crate) fn on_status(&mut self, st: Option<RecorderStatus>, cx: &mut Context<Self>) {
         let saved = st.as_ref().map(|s| s.clips_saved);
         // Clipe novo (ou o gravador reiniciou): relê o banco.
         if saved.is_some() && saved != self.clips_saved && self.clips_saved.is_some() {
@@ -250,6 +311,7 @@ impl Shell {
             self.clips_saved = saved;
             self.starting_recorder = false;
         }
+        self.onboarding_status(st.as_ref());
         if self.status != st {
             self.status = st;
             self.sync_pause();
@@ -763,7 +825,7 @@ impl Render for Shell {
             .id("shell")
             .track_focus(&self.focus)
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| {
-                if this.clip_key(e, window, cx) {
+                if this.onboarding_key(e, cx) || this.clip_key(e, window, cx) {
                     cx.stop_propagation();
                 }
             }))
@@ -780,6 +842,27 @@ impl Render for Shell {
         }
 
         let notice = self.footer_notice();
+        // Onboarding: tela cheia no lugar da biblioteca (os assistentes do servidor abrem por cima).
+        if self.onboarding.is_some() && self.clip.is_none() {
+            let screen = self.onboarding_screen(window, cx);
+            let join = self.join_modal(window, cx);
+            let create = self.create_modal(window, cx);
+            return root
+                .relative()
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .flex_1()
+                        .min_w_0()
+                        .h_full()
+                        .gap(px(6.))
+                        .child(div().flex().flex_1().min_h_0().child(screen))
+                        .children(notice),
+                )
+                .children(join)
+                .children(create);
+        }
         // Clipe aberto: tela própria, sem sidebar nem barra da biblioteca (a grade nem é
         // desenhada; o player redesenha a cada quadro).
         if self.clip.is_some() {
@@ -817,7 +900,6 @@ impl Render for Shell {
             .overflow_y_scroll()
             .child(list);
 
-        let welcome = self.welcome_modal(cx);
         let server_modal = self.server_modal_view(cx);
         let join = self.join_modal(window, cx);
         let create = self.create_modal(window, cx);
@@ -836,7 +918,6 @@ impl Render for Shell {
                     .child(content)
                     .children(notice),
             )
-            .children(welcome)
             .children(server_modal)
             .children(join)
             .children(create)

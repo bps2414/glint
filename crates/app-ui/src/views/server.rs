@@ -53,13 +53,13 @@ pub enum ServerModal {
 }
 
 /// O que o botão Entrar pede ao servidor.
-enum Ask {
+pub(crate) enum Ask {
     Join { code: String, name: String },
     Claim { code: String },
 }
 
 /// Nome do usuário do Windows (sugestão do nome da conta).
-pub(super) fn os_user_name() -> String {
+pub(crate) fn os_user_name() -> String {
     std::env::var("USERNAME")
         .or_else(|_| std::env::var("USER"))
         .unwrap_or_default()
@@ -96,6 +96,68 @@ impl Shell {
             Some(i) => self.open_join(Some(i), cx),
             None => self.notify_user(tr("join.invalid_link"), cx),
         }
+    }
+
+    /// "Entrar num servidor" já no modo "Outro PC" (código de um PC conectado).
+    pub fn open_join_code(&mut self, cx: &mut Context<Self>) {
+        self.open_join(None, cx);
+        if let Some(j) = self.join.as_mut() {
+            j.mode = JoinMode::Code;
+        }
+    }
+
+    /// Link de convite colado (ou só o código, para o servidor já configurado).
+    pub(crate) fn parse_invite_text(&self, text: &str) -> Option<Invite> {
+        invite::parse(text).or_else(|| {
+            (self.has_server() && !text.is_empty() && !text.contains(['/', ' '])).then(|| Invite {
+                server: self.config.server_url.clone(),
+                code: text.to_string(),
+            })
+        })
+    }
+
+    /// Entra no servidor em segundo plano e guarda a conta; `done` recebe o erro (ou `None`).
+    pub(crate) fn join_with(
+        &mut self,
+        server: String,
+        ask: Ask,
+        done: impl FnOnce(&mut Shell, Option<SharedString>, &mut Context<Shell>) + 'static,
+        cx: &mut Context<Self>,
+    ) {
+        let incompatible = tr("join.incompatible").to_string();
+        let base = server.clone();
+        cx.spawn(async move |this, cx| {
+            let r = cx
+                .background_executor()
+                .spawn(async move {
+                    let c = Client::new(&base, None);
+                    let info = match c.info() {
+                        Ok(i) if i.api_version == API_VERSION => i,
+                        // Servidor antigo (sem /info) ou de outra versão da API.
+                        Ok(_) | Err(CloudError::Api { status: 404, .. }) => {
+                            return Err(CloudError::Other(incompatible))
+                        }
+                        Err(e) => return Err(e),
+                    };
+                    let token = match ask {
+                        Ask::Join { code, name } => c.join(&code, &name)?,
+                        Ask::Claim { code } => c.claim_link(&code)?,
+                    };
+                    Ok((info, token))
+                })
+                .await;
+            let _ = this.update(cx, |t, cx| {
+                match r {
+                    Ok((info, token)) => {
+                        done(t, None, cx);
+                        t.connect(server, info, token, cx);
+                    }
+                    Err(e) => done(t, Some(e.to_string().into()), cx),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     fn close_join(&mut self, cx: &mut Context<Self>) {
@@ -166,15 +228,7 @@ impl Shell {
                 let text = val(&f.invite);
                 let name = val(&f.name);
                 // Só o código, sem link: vale para o servidor já configurado.
-                let inv = invite::parse(&text).or_else(|| {
-                    (self.has_server() && !text.is_empty() && !text.contains(['/', ' '])).then(
-                        || Invite {
-                            server: self.config.server_url.clone(),
-                            code: text.clone(),
-                        },
-                    )
-                });
-                let Some(inv) = inv else {
+                let Some(inv) = self.parse_invite_text(&text) else {
                     return self.join_error(tr("join.invalid_link"), cx);
                 };
                 let n = name.chars().count();
@@ -205,43 +259,20 @@ impl Shell {
             j.error = None;
         }
         cx.notify();
-        let incompatible = tr("join.incompatible").to_string();
-        let base = server.clone();
-        cx.spawn(async move |this, cx| {
-            let r = cx
-                .background_executor()
-                .spawn(async move {
-                    let c = Client::new(&base, None);
-                    let info = match c.info() {
-                        Ok(i) if i.api_version == API_VERSION => i,
-                        // Servidor antigo (sem /info) ou de outra versão da API.
-                        Ok(_) | Err(CloudError::Api { status: 404, .. }) => {
-                            return Err(CloudError::Other(incompatible))
-                        }
-                        Err(e) => return Err(e),
-                    };
-                    let token = match ask {
-                        Ask::Join { code, name } => c.join(&code, &name)?,
-                        Ask::Claim { code } => c.claim_link(&code)?,
-                    };
-                    Ok((info, token))
-                })
-                .await;
-            let _ = this.update(cx, |t, cx| {
+        self.join_with(
+            server,
+            ask,
+            |t, err, cx| {
                 if let Some(j) = t.join.as_mut() {
                     j.busy = false;
                 }
-                match r {
-                    Ok((info, token)) => {
-                        t.join = None;
-                        t.connect(server, info, token, cx);
-                    }
-                    Err(e) => t.join_error(e.to_string().into(), cx),
+                match err {
+                    None => t.join = None,
+                    Some(e) => t.join_error(e, cx),
                 }
-                cx.notify();
-            });
-        })
-        .detach();
+            },
+            cx,
+        );
     }
 
     /// Guarda a conta nova: troca de servidor se preciso (desconectando a conta antiga).
@@ -262,9 +293,6 @@ impl Shell {
         if server != self.config.server_url {
             self.apply(|c| c.server_url = server, cx);
         }
-        if !self.config.welcome_done {
-            self.apply(|c| c.welcome_done = true, cx);
-        }
         secret::save(&token);
         self.token = Some(token);
         self.notify_user(tr_args("join.connected", &[("name", &info.name)]), cx);
@@ -272,6 +300,8 @@ impl Shell {
         // O campo do endereço nas Configurações é recriado com o servidor novo.
         self.settings = None;
         self.fetch_account(cx);
+        // Onboarding no passo do servidor: segue para o próximo.
+        self.onboarding_connected(cx);
     }
 
     /// Sai do servidor: desconecta a conta e esquece o endereço.

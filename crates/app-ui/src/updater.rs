@@ -178,8 +178,9 @@ impl Shell {
 }
 
 /// Abre o instalador sem perguntas (Inno Setup: só a barra de progresso). Ele fecha o
-/// gravador e este app, instala por cima e abre os dois de novo.
-fn run_installer(path: &std::path::Path) -> std::io::Result<()> {
+/// gravador e este app, instala por cima e abre os dois de novo (o app com
+/// `--from-installer`, que passa pelo splash sem procurar atualização).
+pub(crate) fn run_installer(path: &std::path::Path) -> std::io::Result<()> {
     std::process::Command::new(path)
         .args([
             "/SILENT",

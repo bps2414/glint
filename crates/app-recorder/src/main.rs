@@ -10,6 +10,8 @@
 
 mod args;
 #[cfg(windows)]
+mod autoupdate;
+#[cfg(windows)]
 mod cli;
 #[cfg(windows)]
 mod daemon;

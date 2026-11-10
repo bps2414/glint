@@ -1,5 +1,5 @@
 ; Instalador do Glint (Inno Setup 6). Gerado pelo scripts\release.ps1:
-;   ISCC /DAppVersion=1.0.0-rc.3 /DSrcDir=..\dist\Glint installer\glint.iss
+;   ISCC /DAppVersion=1.1.0 /DSrcDir=..\dist\Glint installer\glint.iss
 ; Instala por usuário (sem administrador) em %LOCALAPPDATA%\Programs\Glint.
 ; Clipes e configurações ficam fora da pasta do programa e sobrevivem a desinstalar/atualizar.
 #ifndef AppVersion
@@ -51,7 +51,9 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 [Run]
 ; O gravador se registra para iniciar com o Windows (config start_with_os, padrão ligado).
 Filename: "{app}\{#RecExe}"; Flags: nowait runasoriginaluser
-Filename: "{app}\{#AppExe}"; Description: "Abrir o {#AppName}"; Flags: nowait postinstall runasoriginaluser
+; O app abre pelo launcher sem procurar atualização. Atualização em segundo plano (/glintbg, pedida
+; pelo gravador com tudo ocioso) não abre a janela: só o gravador volta.
+Filename: "{app}\{#AppExe}"; Parameters: "--from-installer"; Description: "Abrir o {#AppName}"; Flags: nowait postinstall runasoriginaluser; Check: not IsBackground
 
 [UninstallRun]
 Filename: "{app}\{#RecExe}"; Parameters: "--quit"; Flags: runhidden waituntilterminated; RunOnceId: "QuitRecorder"
@@ -67,6 +69,16 @@ Root: HKCU; Subkey: "Software\Classes\glint\DefaultIcon"; ValueType: string; Val
 Root: HKCU; Subkey: "Software\Classes\glint\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"" ""%1"""
 
 [Code]
+// /glintbg: o gravador atualizou sozinho em segundo plano (app fechado, sem jogo).
+function IsBackground: Boolean;
+var I: Integer;
+begin
+  Result := False;
+  for I := 1 to ParamCount do
+    if CompareText(ParamStr(I), '/glintbg') = 0 then
+      Result := True;
+end;
+
 // Antes de copiar: fecha o gravador pelo IPC (ele segura as DLLs) e o app.
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var Code: Integer;

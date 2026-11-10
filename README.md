@@ -62,9 +62,18 @@ the way, keeps the play when you press F8 and turns the clip into a link that pl
 
 1. Download the latest installer from [GitHub Releases](https://github.com/bps2414/glint/releases/latest)
    and run it (per-user install, no admin needed).
-2. The recorder starts in the tray and waits for a game. Click the tray icon, or open Glint, to see the
-   library.
-3. Optional: Settings → System → **Start with Windows**. Updates are offered inside the app.
+2. Glint opens a short setup: your hotkeys (press them to check the recorder hears them), recording
+   quality (it tests what your graphics card can encode and recommends a level), joining a server, and
+   Windows options. Every step saves right away, and **Skip setup** keeps the recommended values. After
+   updating from an older version you go through it once; your account and settings are kept.
+3. The recorder then lives in the tray and waits for a game. Click the tray icon, or open Glint, to see
+   the library.
+
+**Updates.** When Glint opens with the recorder closed, a small launcher checks for a new version first
+(5 s at most, skipped offline), installs it, starts the recorder and opens the library. The recorder,
+which starts with Windows, also downloads new versions in the background and installs them only when
+nothing is happening: no game, no recording, and the Glint window closed. Turn both off in Settings →
+System → **Check for updates automatically** (the Settings button still checks on demand).
 
 **SmartScreen warning.** The installer is not code-signed yet, so Windows may show "Windows protected your
 PC". Click **More info → Run anyway**. The source is here and releases are built by CI from tagged commits;
@@ -75,9 +84,10 @@ signing is planned.
 Glint works 100% locally with no account and no server: record, trim, export MP4.
 
 To get a link that plays in Discord, you run your own small server on Cloudflare's free plan (a Worker with
-D1 and R2). There is no shared server; each person or group deploys their own and pastes its URL into
-Settings → Server (the Publish button shows "Connect server" until then). Login is Discord only; the first
-person to sign in on a new server becomes admin and everyone else needs an invite.
+D1 and R2). There is no shared server; each person or group has their own. To join a friend's server,
+paste the invite link they sent (in the setup or Settings → Server): the invite becomes your account, no
+sign-in needed. To run your own, **Create my server** in the app sets it up on your free Cloudflare
+account and connects you as admin.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/bps2414/glint/tree/main/server)
 
