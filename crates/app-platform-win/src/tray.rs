@@ -31,6 +31,8 @@ use crate::{Error, Result};
 
 /// Mensagem da thread: abrir o menu no cursor.
 const WM_SHOW_MENU: u32 = WM_APP + 1;
+/// Mensagem da thread: "Sair" escolhido; o ícone some na hora, sem esperar o encerramento.
+const WM_HIDE_ICON: u32 = WM_APP + 2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TrayCommand {
@@ -296,6 +298,14 @@ fn run(
         let _ = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     }
     let thread_id = unsafe { GetCurrentThreadId() };
+    let commands: Arc<dyn Fn(TrayCommand) + Send + Sync> = Arc::new(move |cmd| {
+        if cmd == TrayCommand::Quit {
+            unsafe {
+                let _ = PostThreadMessageW(thread_id, WM_HIDE_ICON, WPARAM(0), LPARAM(0));
+            }
+        }
+        commands(cmd)
+    });
     let s = state.lock().clone();
     let mut builder = TrayIconBuilder::new()
         .with_menu_on_left_click(false)
@@ -360,6 +370,13 @@ fn run(
                     m.set_model(model(&new));
                 }
                 shown = new;
+                continue;
+            }
+            if msg.hwnd.0.is_null() && msg.message == WM_HIDE_ICON {
+                if let Some(m) = &menu {
+                    m.hide();
+                }
+                let _ = tray.set_visible(false);
                 continue;
             }
             if msg.hwnd.0.is_null() && msg.message == WM_SHOW_MENU {

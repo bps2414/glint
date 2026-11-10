@@ -33,6 +33,8 @@ const TICK: Duration = Duration::from_secs(1);
 /// Uso do motor 3D (%) a partir do qual a janela em tela cheia "usa a GPU".
 const GPU_ACTIVE_PERCENT: f64 = 1.0;
 const STATUS_LOG_EVERY: Duration = Duration::from_secs(30);
+/// Prazo para o encerramento limpo depois de "Sair"; passou disso, o processo sai à força.
+const QUIT_GRACE: Duration = Duration::from_secs(8);
 
 /// Índices das hotkeys registradas (ordem de `Daemon::hotkey_ok`).
 const HOTKEY_SAVE: usize = 0;
@@ -87,6 +89,9 @@ pub fn run(autostart_launch: bool) -> Result<()> {
             if req == Request::Status {
                 return Response::Status(status.lock().clone());
             }
+            if req == Request::Shutdown {
+                arm_quit_watchdog();
+            }
             let (rtx, rrx) = std::sync::mpsc::channel();
             if tx.send(Event::Ipc(req, rtx)).is_err() {
                 return Response::Error("gravador encerrando".into());
@@ -135,6 +140,9 @@ pub fn run(autostart_launch: bool) -> Result<()> {
     power::set_process_eco(true);
     let tray_tx = tx;
     match Tray::start(d.tray_state(), move |cmd| {
+        if cmd == TrayCommand::Quit {
+            arm_quit_watchdog();
+        }
         let _ = tray_tx.send(Event::Tray(cmd));
     }) {
         Ok(t) => d.tray = Some(t),
@@ -143,6 +151,28 @@ pub fn run(autostart_launch: bool) -> Result<()> {
     d.publish();
     d.run(rx);
     Ok(())
+}
+
+/// "Sair" tem que fechar o gravador mesmo se a thread principal estiver presa (driver, captura,
+/// encoder) ou o encerramento travar num join. Armado fora da thread principal, por quem recebeu
+/// o pedido (bandeja ou IPC); só a primeira chamada conta.
+fn arm_quit_watchdog() {
+    static ARMED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if ARMED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    let _ = std::thread::Builder::new()
+        .name("quit-watchdog".into())
+        .spawn(|| {
+            std::thread::sleep(QUIT_GRACE);
+            tracing::error!(
+                "o encerramento não terminou em {} s; saindo à força",
+                QUIT_GRACE.as_secs()
+            );
+            // Dá tempo do log chegar ao arquivo.
+            std::thread::sleep(Duration::from_millis(200));
+            std::process::exit(0);
+        });
 }
 
 /// Clipe de kill esperando o fim da janela do combo para ser salvo.
