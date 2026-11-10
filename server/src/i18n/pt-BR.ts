@@ -23,6 +23,14 @@ export const ptBR = {
   inviteInvalid: "Convite inválido, vencido ou já usado.",
   inviteExpiredSession: "O login expirou. Entre com o Discord de novo.",
   inviteLinkSaved: "Convite guardado. Agora entre com o Discord para criar sua conta.",
+  inviteJoinTitle: (server: string) => `Convite para ${server}`,
+  inviteFrom: (who: string, app: string) => `${who} te convidou para postar clipes pelo ${app}.`,
+  inviteOpenApp: (app: string) => `Abrir no ${app}`,
+  inviteInstallHint: (app: string) => `Ainda não tem o ${app}? Instale e clique no link do convite de novo.`,
+  inviteWithDiscord: "Ou entre com o Discord pelo navegador",
+  signIn: "Entrar",
+  signInViaApp: (app: string) => `Para entrar no site, abra o ${app} e use "Abrir no site". Conta nova: peça um convite.`,
+  webCodeExpired: "Este link de entrada venceu ou já foi usado. Abra o site de novo pelo app.",
 
   // Erros
   notFound: "Não encontrado",
@@ -92,6 +100,9 @@ export const ptBR = {
     badVideo: "O arquivo enviado não é um MP4 válido ou o tamanho não confere.",
     badThumb: "A miniatura precisa ser um JPEG de até 1 MB.",
     badCode: "Código de login inválido ou vencido.",
+    badLinkCode: "Código inválido, vencido ou já usado. Gere outro no PC que já está conectado.",
+    alreadySetup: "Este servidor já tem dono.",
+    notSelf: "Você não pode fazer isso com a sua própria conta.",
     server: "Erro no servidor.",
   },
 };

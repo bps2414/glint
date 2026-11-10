@@ -5,6 +5,12 @@ import { APP_NAME, THEME_COLOR } from "../brand";
 import type { AppEnv, User } from "../env";
 import { lang, t } from "../i18n";
 
+/** Login Discord ligado neste deploy (como a língua: um valor por deploy, setado a cada requisição). */
+export let discordLogin = false;
+export function setDiscordLogin(on: boolean) {
+  discordLogin = on;
+}
+
 export function render(c: Context<AppEnv>, node: Child, status: 200 | 400 | 403 | 404 | 429 | 500 = 200) {
   c.header("Cache-Control", "no-store");
   return c.html(`<!doctype html>${String(node)}`, status);
@@ -58,7 +64,7 @@ export function Layout(props: {
                     </button>
                   </form>
                 </>
-              ) : props.hideLogin ? null : (
+              ) : props.hideLogin || !discordLogin ? null : (
                 <a class="btn" href="/entrar">
                   {t.login}
                 </a>

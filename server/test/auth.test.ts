@@ -100,11 +100,11 @@ describe("login web", () => {
     expect(inv?.uses).toBe(1);
   });
 
-  it("link de convite (/i/<código>) cria a conta direto no login", async () => {
+  it("link de convite com Discord (/i/<código>/discord) cria a conta direto no login", async () => {
     const admin = await adminBrowser();
     const code = await makeInvite(admin, 2);
     const b = new Browser();
-    const r0 = await b.fetch(`/i/${code}`);
+    const r0 = await b.fetch(`/i/${code}/discord`);
     expect(r0.headers.get("Location")).toBe("/entrar");
     const r = await b.login({ id: "200000000000000004" });
     expect(r.headers.get("Location")).toBe("/");
@@ -116,7 +116,7 @@ describe("login web", () => {
     const vencido = await makeInvite(admin, 5, 1);
     clock.now += 2 * 86400_000;
     const b = new Browser();
-    await b.fetch(`/i/${vencido}`);
+    await b.fetch(`/i/${vencido}/discord`);
     const r = await b.login({ id: "200000000000000005" });
     expect(r.headers.get("Location")).toBe("/convite?erro=1");
 

@@ -1,4 +1,5 @@
 import type { DiscordApi } from "./auth/discord";
+import { APP_NAME } from "./brand";
 
 /** Bindings e variáveis do Worker (wrangler.jsonc + segredos). */
 export interface Bindings {
@@ -14,15 +15,29 @@ export interface Bindings {
   /** Língua das páginas e mensagens: "en" (padrão) ou "pt-BR". */
   SERVER_LANG?: string;
   MAX_CLIP_MB: string;
-  /** Segredo (wrangler secret put). */
-  DISCORD_CLIENT_SECRET: string;
+  /** Nome do servidor mostrado no convite e no app (padrão: o nome do app). */
+  SERVER_NAME?: string;
+  /** Segredo (wrangler secret put). Só com login Discord. */
+  DISCORD_CLIENT_SECRET?: string;
   /** Segredo: chave HMAC das URLs temporárias de clipes privados. */
   SIGNING_KEY: string;
+  /**
+   * Segredo opcional: quem souber cria o admin pelo POST /api/v1/setup (servidor novo, sem usuários).
+   * Definido, o primeiro login Discord deixa de virar admin.
+   */
+  SETUP_TOKEN?: string;
 }
+
+/** Versão do servidor (acompanha o app, Cargo.toml) e da API que ele fala. */
+export const SERVER_VERSION = "1.0.0-rc.3";
+export const API_VERSION = 1;
 
 export interface User {
   id: string;
-  discord_id: string;
+  /** `null` = conta criada por convite, sem Discord. */
+  discord_id: string | null;
+  /** Nome mostrado no servidor (escolhido no convite ou vindo do Discord). */
+  name: string;
   username: string;
   display_name: string | null;
   avatar: string | null;
@@ -58,6 +73,10 @@ export type AppEnv = {
 };
 
 export interface Config {
+  /** Login Discord ligado (DISCORD_CLIENT_ID configurado). */
+  discordLogin: boolean;
+  /** Nome do servidor (SERVER_NAME ou o nome do app). */
+  serverName: string;
   inviteRequired: boolean;
   adminDiscordIds: Set<string>;
   /** Cota padrão por usuário; 0 = sem cota por usuário. */
@@ -76,6 +95,8 @@ export function readConfig(env: Bindings): Config {
     return Number.isFinite(n) && n > 0 ? n : fallback;
   };
   return {
+    discordLogin: !!(env.DISCORD_CLIENT_ID ?? "").trim(),
+    serverName: (env.SERVER_NAME ?? "").trim().slice(0, 60) || APP_NAME,
     // Qualquer coisa diferente de "false" mantém o portão (falhar fechado).
     inviteRequired: (env.INVITE_REQUIRED ?? "").trim().toLowerCase() !== "false",
     adminDiscordIds: new Set(
@@ -98,5 +119,9 @@ export const MAX_THUMB_BYTES = 1 * MB;
 export const UPLOAD_TTL_MS = 24 * 3600_000;
 export const WEB_SESSION_MS = 30 * 24 * 3600_000;
 export const APP_SESSION_MS = 180 * 24 * 3600_000;
+/** Código curto para entrar com o mesmo usuário em outro PC. */
+export const LINK_CODE_MS = 10 * 60_000;
+/** Código de uso único com que o app abre o site já logado. */
+export const WEB_CODE_MS = 60_000;
 /** URL temporária de vídeo/miniatura privados. */
 export const SIGNED_URL_MS = 3600_000;

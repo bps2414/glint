@@ -28,6 +28,19 @@ export function parseInviteCode(input: string | undefined | null): string | null
   return isToken(code, 22, 22) ? code : null;
 }
 
+/** Convite ainda valendo (sem gastar): devolve o nome de quem convidou, ou `null`. */
+export async function peekInvite(db: D1Database, code: string, now: number): Promise<{ inviter: string } | null> {
+  const row = await db
+    .prepare(
+      `SELECT u.name AS inviter FROM invites i JOIN users u ON u.id = i.created_by
+        WHERE i.code_hash = ? AND i.revoked_at IS NULL AND i.uses < i.max_uses
+          AND (i.expires_at IS NULL OR i.expires_at > ?)`,
+    )
+    .bind(await sha256(code), now)
+    .first<{ inviter: string }>();
+  return row ?? null;
+}
+
 /** Gasta um uso do convite, de forma atômica. Devolve o id do convite ou `null`. */
 export async function redeemInvite(db: D1Database, code: string, now: number): Promise<string | null> {
   const row = await db

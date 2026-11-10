@@ -28,7 +28,7 @@
     // Portão de convite depois do login Discord. "false" = qualquer conta Discord entra.
     "INVITE_REQUIRED": "true",
     // IDs Discord (separados por vírgula) que viram admin e não precisam de convite.
-    // Vazio: o primeiro login de um servidor sem usuários vira admin.
+    // Vazio e sem o segredo SETUP_TOKEN: o primeiro login de um servidor sem usuários vira admin.
     "ADMIN_DISCORD_IDS": "",
     "DISCORD_CLIENT_ID": "",
     // Cota por usuário em GB. 0 = sem cota por usuário.
@@ -37,7 +37,9 @@
     "STORAGE_LIMIT_GB": "9.5",
     "MAX_CLIP_MB": "500",
     // Língua das páginas e mensagens da API: "en" ou "pt-BR".
-    "SERVER_LANG": "en"
+    "SERVER_LANG": "en",
+    // Nome do servidor no convite e no app. Vazio = nome do app.
+    "SERVER_NAME": ""
   },
   "observability": { "enabled": true }
 }

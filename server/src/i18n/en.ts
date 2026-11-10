@@ -24,6 +24,14 @@ export const en: typeof ptBR = {
   inviteInvalid: "Invalid invite, expired, or already used.",
   inviteExpiredSession: "Your sign-in expired. Sign in with Discord again.",
   inviteLinkSaved: "Invite saved. Now sign in with Discord to create your account.",
+  inviteJoinTitle: (server: string) => `Invite to ${server}`,
+  inviteFrom: (who: string, app: string) => `${who} invited you to post clips with ${app}.`,
+  inviteOpenApp: (app: string) => `Open in ${app}`,
+  inviteInstallHint: (app: string) => `Don't have ${app} yet? Install it and click the invite link again.`,
+  inviteWithDiscord: "Or sign in with Discord in the browser",
+  signIn: "Sign in",
+  signInViaApp: (app: string) => `To sign in on the site, open ${app} and use "Open site". New account: ask for an invite.`,
+  webCodeExpired: "This sign-in link expired or was already used. Open the site from the app again.",
 
   // Errors
   notFound: "Not found",
@@ -93,6 +101,9 @@ export const en: typeof ptBR = {
     badVideo: "The uploaded file isn't a valid MP4 or its size doesn't match.",
     badThumb: "The thumbnail must be a JPEG up to 1 MB.",
     badCode: "Invalid or expired sign-in code.",
+    badLinkCode: "Invalid, expired or already used code. Generate a new one on the PC that is already connected.",
+    alreadySetup: "This server already has an owner.",
+    notSelf: "You can't do that to your own account.",
     server: "Server error.",
   },
 };

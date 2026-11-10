@@ -4,7 +4,7 @@ import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { MAX_THUMB_BYTES, PART_SIZE } from "../env";
-import { avatarUrl } from "../auth/discord";
+import { userDto } from "./accounts";
 import { t } from "../i18n";
 import { randomId } from "../lib/crypto";
 import {
@@ -86,13 +86,7 @@ async function uploadState(c: Ctx, clip: ClipRow) {
 api.get("/me", async (c) => {
   const u = c.var.user!;
   return c.json({
-    user: {
-      id: u.id,
-      username: u.username,
-      display_name: u.display_name,
-      avatar_url: avatarUrl(u.discord_id, u.avatar),
-      role: u.role,
-    },
+    user: userDto(u),
     // quota_bytes = 0: servidor sem cota por usuário.
     quota: { used_bytes: await usedBytes(c.env.DB, u.id), quota_bytes: userQuota(c.var.config, u) },
     limits: { max_clip_bytes: c.var.config.maxClipBytes, part_size: PART_SIZE, max_thumb_bytes: MAX_THUMB_BYTES },

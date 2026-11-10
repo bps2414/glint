@@ -1,15 +1,16 @@
 /** @jsxImportSource hono/jsx */
 // Login: Discord OAuth → (convite, se for conta nova) → sessão web ou código para o app.
 import { Hono, type Context } from "hono";
+import { APP_NAME } from "../brand";
 import type { AppEnv, User } from "../env";
 import { t } from "../i18n";
 import { isToken, randomId, safeEqual, sha256 } from "../lib/crypto";
 import { allow, clientIp } from "../lib/ratelimit";
 import { safeNext } from "../lib/security";
-import { InvitePage } from "../pages/invite";
+import { InviteLanding, InvitePage } from "../pages/invite";
 import { Message, render } from "../pages/layout";
 import type { DiscordProfile } from "./discord";
-import { parseInviteCode, redeemInvite, refundInvite } from "./invites";
+import { parseInviteCode, peekInvite, redeemInvite, refundInvite } from "./invites";
 import {
   clearHostCookie,
   createSession,
@@ -44,8 +45,8 @@ function tooMany(c: Ctx) {
 }
 
 async function startOAuth(c: Ctx, flow: OAuthFlow) {
+  if (!c.var.config.discordLogin) return render(c, <Message title={t.signIn} text={t.signInViaApp(APP_NAME)} />, 404);
   if (!(await allow(c, `login:${clientIp(c)}`, 30, 600))) return tooMany(c);
-  if (!c.env.DISCORD_CLIENT_ID) throw new Error("DISCORD_CLIENT_ID não configurado");
   const state = await putFlow(c, "oauth", flow, OAUTH_TTL);
   // O state também fica num cookie: o callback só vale no mesmo navegador (anti login-CSRF).
   setHostCookie(c, OAUTH_COOKIE, state, OAUTH_TTL / 1000);
@@ -101,7 +102,7 @@ authRoutes.get("/auth/discord/callback", async (c) => {
   try {
     profile = await c.var.deps.discord.profile({
       clientId: c.env.DISCORD_CLIENT_ID,
-      clientSecret: c.env.DISCORD_CLIENT_SECRET,
+      clientSecret: c.env.DISCORD_CLIENT_SECRET ?? "",
       redirectUri: redirectUri(c),
       code: code.slice(0, 200),
     });
@@ -119,16 +120,17 @@ authRoutes.get("/auth/discord/callback", async (c) => {
     // Só promove: quem virou admin por ser o primeiro usuário continua admin.
     const role = roleFor(c, profile.id) === "admin" ? "admin" : existing.role;
     await c.env.DB.prepare(
-      "UPDATE users SET username = ?, display_name = ?, avatar = ?, role = ?, last_login_at = ? WHERE id = ?",
+      "UPDATE users SET name = ?, username = ?, display_name = ?, avatar = ?, role = ?, last_login_at = ? WHERE id = ?",
     )
-      .bind(profile.username, profile.global_name, profile.avatar, role, now, existing.id)
+      .bind(discordName(profile), profile.username, profile.global_name, profile.avatar, role, now, existing.id)
       .run();
     return finishLogin(c, flow, existing.id);
   }
 
   const isAdmin = c.var.config.adminDiscordIds.has(profile.id);
-  // Servidor novo (sem usuários e sem ADMIN_DISCORD_IDS): o primeiro login vira admin, sem convite.
-  if (!isAdmin && c.var.config.adminDiscordIds.size === 0) {
+  // Servidor novo (sem usuários, sem ADMIN_DISCORD_IDS e sem SETUP_TOKEN): o primeiro login vira
+  // admin, sem convite. Com SETUP_TOKEN o admin nasce pelo POST /api/v1/setup.
+  if (!isAdmin && c.var.config.adminDiscordIds.size === 0 && !c.env.SETUP_TOKEN) {
     const firstId = await createFirstAdmin(c, profile);
     if (firstId) return finishLogin(c, flow, firstId);
   }
@@ -148,13 +150,49 @@ authRoutes.get("/auth/discord/callback", async (c) => {
   return c.redirect(fromLink ? "/convite?erro=1" : "/convite");
 });
 
-/** Link de convite: guarda o código e manda para o login. */
+/**
+ * Link de convite: página com o nome do servidor, quem convidou, "Abrir no Glint" (glint://join)
+ * e "Baixar". Não gasta o convite: quem gasta é o app (POST /api/v1/join) ou o login Discord.
+ */
 authRoutes.get("/i/:code", async (c) => {
+  const code = parseInviteCode(c.req.param("code"));
+  const invite = code ? await peekInvite(c.env.DB, code, c.var.deps.now()) : null;
+  if (!code || !invite) return render(c, <Message title={t.inviteTitle} text={t.inviteInvalid} user={c.var.user} />, 404);
+  const origin = new URL(c.req.url).origin;
+  const open = `glint://join?s=${encodeURIComponent(origin)}&i=${code}`;
+  const res = render(
+    c,
+    <InviteLanding
+      server={c.var.config.serverName}
+      inviter={invite.inviter}
+      openUrl={open}
+      discordUrl={c.var.config.discordLogin && !c.var.user ? `/i/${code}/discord` : undefined}
+    />,
+  );
+  res.headers.set("X-Robots-Tag", "noindex");
+  return res;
+});
+
+/** Convite pelo navegador com Discord: guarda o código e manda para o login. */
+authRoutes.get("/i/:code/discord", async (c) => {
   const code = parseInviteCode(c.req.param("code"));
   if (!code) return render(c, <Message title={t.inviteTitle} text={t.inviteInvalid} />, 404);
   if (c.var.user) return c.redirect("/");
   setHostCookie(c, INVITE_COOKIE, code, 3600);
   return c.redirect("/entrar");
+});
+
+/** O app abre o site já logado: código de uso único (POST /api/v1/auth/web-code) vira sessão web. */
+authRoutes.get("/auth/web", async (c) => {
+  if (!(await allow(c, `web:${clientIp(c)}`, 30, 600))) return tooMany(c);
+  const flow = await takeFlow<{ user_id: string; next: string }>(c, "web_code", c.req.query("code"));
+  const user = flow
+    ? await c.env.DB.prepare("SELECT id FROM users WHERE id = ? AND disabled = 0").bind(flow.user_id).first<{ id: string }>()
+    : null;
+  if (!flow || !user) return render(c, <Message title={t.loginFailed} text={t.webCodeExpired} />, 400);
+  if (c.var.session) await destroySession(c);
+  await createSession(c, user.id, "web");
+  return c.redirect(safeNext(flow.next));
 });
 
 authRoutes.get("/convite", async (c) => {
@@ -231,14 +269,16 @@ function roleFor(c: Ctx, discordId: string): "admin" | "user" {
   return c.var.config.adminDiscordIds.has(discordId) ? "admin" : "user";
 }
 
+const discordName = (p: DiscordProfile) => p.global_name ?? p.username;
+
 async function createUser(c: Ctx, p: DiscordProfile, inviteId: string | null): Promise<string> {
   const id = randomId();
   const now = c.var.deps.now();
   await c.env.DB.prepare(
-    `INSERT INTO users (id, discord_id, username, display_name, avatar, role, quota_bytes, invite_id, created_at, last_login_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO users (id, discord_id, name, username, display_name, avatar, role, quota_bytes, invite_id, created_at, last_login_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
-    .bind(id, p.id, p.username, p.global_name, p.avatar, roleFor(c, p.id), c.var.config.userQuotaBytes, inviteId, now, now)
+    .bind(id, p.id, discordName(p), p.username, p.global_name, p.avatar, roleFor(c, p.id), c.var.config.userQuotaBytes, inviteId, now, now)
     .run();
   return id;
 }
@@ -248,11 +288,11 @@ async function createFirstAdmin(c: Ctx, p: DiscordProfile): Promise<string | nul
   const id = randomId();
   const now = c.var.deps.now();
   const res = await c.env.DB.prepare(
-    `INSERT INTO users (id, discord_id, username, display_name, avatar, role, quota_bytes, invite_id, created_at, last_login_at)
-     SELECT ?, ?, ?, ?, ?, 'admin', ?, NULL, ?, ?
+    `INSERT INTO users (id, discord_id, name, username, display_name, avatar, role, quota_bytes, invite_id, created_at, last_login_at)
+     SELECT ?, ?, ?, ?, ?, ?, 'admin', ?, NULL, ?, ?
       WHERE NOT EXISTS (SELECT 1 FROM users)`,
   )
-    .bind(id, p.id, p.username, p.global_name, p.avatar, c.var.config.userQuotaBytes, now, now)
+    .bind(id, p.id, discordName(p), p.username, p.global_name, p.avatar, c.var.config.userQuotaBytes, now, now)
     .run();
   return res.meta.changes ? id : null;
 }

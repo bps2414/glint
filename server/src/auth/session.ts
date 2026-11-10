@@ -69,7 +69,7 @@ export const loadSession: MiddlewareHandler<AppEnv> = async (c, next) => {
     const now = c.var.deps.now();
     const row = await c.env.DB.prepare(
       `SELECT s.token_hash, s.kind, s.expires_at, s.last_used_at,
-              u.id, u.discord_id, u.username, u.display_name, u.avatar, u.role,
+              u.id, u.discord_id, u.name, u.username, u.display_name, u.avatar, u.role,
               u.quota_bytes, u.disabled, u.created_at
          FROM sessions s JOIN users u ON u.id = s.user_id
         WHERE s.token_hash = ? AND s.expires_at > ? AND u.disabled = 0`,
@@ -94,6 +94,9 @@ export const loadSession: MiddlewareHandler<AppEnv> = async (c, next) => {
   await next();
 };
 
+/** ID público de um aparelho (sessão): começo do hash do token, nunca o token. */
+export const deviceId = (tokenHash: string) => tokenHash.slice(0, 22);
+
 export async function destroySession(c: Ctx) {
   const s = c.var.session;
   if (s) await c.env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(s.token_hash).run();
@@ -103,10 +106,10 @@ export async function destroySession(c: Ctx) {
 // ---------------------------------------------------------------------------
 // auth_flows: linhas de uso único, chaveadas pelo hash de um token aleatório.
 
-export type FlowKind = "oauth" | "signup" | "app_code";
+export type FlowKind = "oauth" | "signup" | "app_code" | "link" | "web_code";
 
-export async function putFlow(c: Ctx, kind: FlowKind, data: unknown, ttlMs: number): Promise<string> {
-  const token = randomToken(32);
+/** `token` dado: usa ele (ex.: código curto de outro PC) em vez de um aleatório de 256 bits. */
+export async function putFlow(c: Ctx, kind: FlowKind, data: unknown, ttlMs: number, token = randomToken(32)): Promise<string> {
   await c.env.DB.prepare("INSERT INTO auth_flows (id_hash, kind, data, expires_at) VALUES (?, ?, ?, ?)")
     .bind(await sha256(token), kind, JSON.stringify(data), c.var.deps.now() + ttlMs)
     .run();
@@ -114,8 +117,8 @@ export async function putFlow(c: Ctx, kind: FlowKind, data: unknown, ttlMs: numb
 }
 
 /** Lê e apaga (uso único). `null` se não existe, venceu ou é de outro tipo. */
-export async function takeFlow<T>(c: Ctx, kind: FlowKind, token: string | undefined): Promise<T | null> {
-  if (!isToken(token, 20)) return null;
+export async function takeFlow<T>(c: Ctx, kind: FlowKind, token: string | undefined, minLen = 20): Promise<T | null> {
+  if (!isToken(token, minLen)) return null;
   const row = await c.env.DB.prepare(
     "DELETE FROM auth_flows WHERE id_hash = ? AND kind = ? RETURNING data, expires_at",
   )

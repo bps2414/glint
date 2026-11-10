@@ -117,7 +117,7 @@ export function AdminPage(props: {
             {props.users.map((u) => (
               <tr class={u.disabled ? "off" : ""}>
                 <td>
-                  {u.display_name ?? u.username}
+                  {u.name}
                   {u.role === "admin" && <span class="tag on">admin</span>}
                   {u.id === props.me.id && <span class="muted"> ({t.you})</span>}
                 </td>

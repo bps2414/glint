@@ -110,7 +110,7 @@ export async function userBrowser(id: string, admin?: Browser): Promise<Browser>
   const a = admin ?? (await adminBrowser());
   const code = await makeInvite(a);
   const b = new Browser();
-  await b.fetch(`/i/${code}`);
+  await b.fetch(`/i/${code}/discord`);
   const r = await b.login({ id, username: `u${id.slice(-3)}` });
   if (r.status !== 302 || !b.session) throw new Error(`cadastro falhou: ${r.status} ${r.headers.get("Location")}`);
   return b;

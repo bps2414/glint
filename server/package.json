@@ -15,7 +15,13 @@
         "description": "Random string of 32+ characters used to sign links to private clips. Generate one with `openssl rand -base64 32`."
       },
       "ADMIN_DISCORD_IDS": {
-        "description": "Optional. Comma-separated Discord user IDs that are admins. Leave empty: the first login on the server becomes the admin."
+        "description": "Optional. Comma-separated Discord user IDs that are admins. Leave empty (and no SETUP_TOKEN): the first login on the server becomes the admin."
+      },
+      "SETUP_TOKEN": {
+        "description": "Optional secret, 16+ characters. Whoever has it creates the server's admin with `POST /api/v1/setup` (only while the server has no users). Set, the first Discord login no longer becomes admin."
+      },
+      "SERVER_NAME": {
+        "description": "Optional. Server name shown on invites and in the app. Empty: the app's name."
       },
       "STORAGE_LIMIT_GB": {
         "description": "Global limit in GB: the server refuses new clips once all clips together would pass it. R2's free tier is 10 GB; default 9.5."

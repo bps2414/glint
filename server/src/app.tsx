@@ -1,6 +1,7 @@
 /** @jsxImportSource hono/jsx */
 import { Hono } from "hono";
 import { admin } from "./admin";
+import { accounts } from "./api/accounts";
 import { api, apiError } from "./api/clips";
 import { authRoutes } from "./auth/routes";
 import { loadSession } from "./auth/session";
@@ -13,7 +14,7 @@ import { media } from "./media";
 import { releases } from "./releases";
 import { ClipPage } from "./pages/clip";
 import { HomeLoggedIn, HomeLoggedOut } from "./pages/home";
-import { Message, render } from "./pages/layout";
+import { Message, render, setDiscordLogin } from "./pages/layout";
 import { UploadPage } from "./pages/upload";
 
 export function createApp(deps: Deps) {
@@ -24,6 +25,7 @@ export function createApp(deps: Deps) {
     c.set("deps", deps);
     c.set("config", readConfig(c.env));
     setLang(c.env.SERVER_LANG);
+    setDiscordLogin(c.var.config.discordLogin);
     await next();
   });
   app.use("*", sameOriginForCookies);
@@ -54,14 +56,11 @@ export function createApp(deps: Deps) {
     if (!clip || (clip.visibility === "private" && c.var.user?.id !== clip.user_id)) {
       return render(c, <Message title={t.notFound} text={t.notFoundText} user={c.var.user} />, 404);
     }
-    const owner = await c.env.DB.prepare("SELECT username, display_name FROM users WHERE id = ?")
+    const owner = await c.env.DB.prepare("SELECT name FROM users WHERE id = ?")
       .bind(clip.user_id)
-      .first<Pick<User, "username" | "display_name">>();
+      .first<Pick<User, "name">>();
     const urls = await clipUrls(c, clip);
-    const res = render(
-      c,
-      <ClipPage clip={clip} urls={urls} owner={owner?.display_name ?? owner?.username ?? ""} viewer={c.var.user} />,
-    );
+    const res = render(c, <ClipPage clip={clip} urls={urls} owner={owner?.name ?? ""} viewer={c.var.user} />);
     if (clip.visibility !== "public") res.headers.set("X-Robots-Tag", "noindex");
     return res;
   });
@@ -74,6 +73,8 @@ export function createApp(deps: Deps) {
   app.route("/", authRoutes);
   app.route("/", media);
   app.route("/", releases);
+  // `accounts` antes de `api`: a API de clipes exige login em tudo, a de contas tem rotas públicas.
+  app.route("/api/v1", accounts);
   app.route("/api/v1", api);
   app.route("/admin", admin);
 

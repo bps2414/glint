@@ -4,7 +4,7 @@ import type { User } from "../env";
 import { t } from "../i18n";
 import type { ClipRow } from "../lib/clips";
 import { formatBytes, formatDate, formatDuration } from "../lib/format";
-import { Layout } from "./layout";
+import { discordLogin, Layout } from "./layout";
 
 export function HomeLoggedOut(props: { notice?: string }) {
   return (
@@ -16,9 +16,13 @@ export function HomeLoggedOut(props: { notice?: string }) {
         </h1>
         <p class="muted">{t.tagline}</p>
         {props.notice && <p class="notice">{props.notice}</p>}
-        <a class="btn lg-size" href="/entrar">
-          {t.login}
-        </a>
+        {discordLogin ? (
+          <a class="btn lg-size" href="/entrar">
+            {t.login}
+          </a>
+        ) : (
+          <p class="muted">{t.signInViaApp(APP_NAME)}</p>
+        )}
       </section>
     </Layout>
   );
@@ -31,7 +35,7 @@ export function HomeLoggedIn(props: { user: User; used: number; quota: number; c
   return (
     <Layout user={user}>
       <section class="card">
-        <h1>{t.hello(user.display_name ?? user.username)}</h1>
+        <h1>{t.hello(user.name)}</h1>
         <div class="meter-row">
           <span class="muted">{t.storage}</span>
           <span class="mono">
