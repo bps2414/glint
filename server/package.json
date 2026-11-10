@@ -40,7 +40,7 @@
     "dev": "wrangler dev",
     "types": "wrangler types --include-env=false",
     "typecheck": "wrangler types --include-env=false && tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run && vitest run --config feedback/vitest.config.ts",
     "deploy": "node scripts/deploy.mjs"
   },
   "dependencies": {

@@ -1,0 +1,28 @@
+// Worker de feedback/bug report do app (do mantenedor, não do servidor de cada grupo).
+// URL: feedback.getglint.workers.dev (conta Cloudflare "glint").
+// Uma vez: `npx wrangler d1 create glint-feedback` (põe o id abaixo), `npx wrangler r2 bucket create
+// glint-feedback`, `npx wrangler d1 migrations apply glint-feedback --remote`, e os segredos
+// GITHUB_TOKEN (fine-grained, só este repo, Issues: write) e ADMIN_TOKEN com `npx wrangler secret put`.
+// Deploy: `npx wrangler deploy -c feedback/wrangler.jsonc` a partir de server/.
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "feedback",
+  "main": "index.ts",
+  "account_id": "724cbdb576f1d4d15f637d9c2ac6cfe8",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "glint-feedback",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "glint-feedback" }],
+  // Por IP, por local da Cloudflare. O período só pode ser 10 ou 60 s.
+  "ratelimits": [{ "name": "LIMITER", "namespace_id": "2001", "simple": { "limit": 3, "period": 60 } }],
+  "vars": { "GITHUB_REPO": "bps2414/glint" },
+  "observability": { "enabled": true }
+}
