@@ -11,6 +11,7 @@ use std::time::Duration;
 use app_core::{Codec, Config, Resolution};
 use app_ipc::RecorderStatus;
 use gpui_kit::component::input::{InputEvent, InputState};
+use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
@@ -594,7 +595,7 @@ impl Shell {
                     .flex_col()
                     .flex_1()
                     .min_h_0()
-                    .overflow_y_scroll()
+                    .overflow_y_scrollbar()
                     .px(px(56.))
                     .pt(px(12.))
                     .child(div().max_w(px(680.)).child(body)),

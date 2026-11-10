@@ -19,6 +19,8 @@
   list members and remove devices from Settings > Server.
 - **Create your server from the app:** a wizard deploys the server to your free Cloudflare account and
   connects you as admin; it also updates the server when the app is newer.
+- **Scroll bars:** the library, Settings, the setup and the publish panel show a scroll bar you can click
+  and drag.
 - **Windows 10:** recording no longer shows the yellow capture border.
 - **Tray:** Quit always closes the recorder, even if a capture is stuck.
 - **Report a bug / send feedback:** Settings > Help (and **Report bug** in the tray) sends a message

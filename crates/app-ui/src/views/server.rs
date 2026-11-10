@@ -4,6 +4,7 @@
 use app_cloud::invite::{self, Invite};
 use app_cloud::{Client, CloudError, LinkCode, Member, ServerInfo, API_VERSION};
 use gpui_kit::component::input::{InputEvent, InputState};
+use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
@@ -571,7 +572,7 @@ impl Shell {
                             div()
                                 .id("srv-members-list")
                                 .max_h(px(420.))
-                                .overflow_y_scroll()
+                                .overflow_y_scrollbar()
                                 .child(rows),
                         )
                         .child(buttons(

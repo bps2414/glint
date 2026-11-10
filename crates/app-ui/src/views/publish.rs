@@ -15,6 +15,7 @@ use std::time::Duration;
 use app_cloud::{clip_id_from_url, login, Client, CloudError, Visibility};
 use app_core::{brand, library::Clip, Config};
 use app_media::ExportOptions;
+use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
@@ -681,7 +682,7 @@ impl Shell {
                     .gap(px(18.))
                     .flex_1()
                     .min_h_0()
-                    .overflow_y_scroll()
+                    .overflow_y_scrollbar()
                     .px(px(18.))
                     .pt(px(20.))
                     .pb(px(8.))

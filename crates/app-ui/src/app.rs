@@ -9,6 +9,7 @@ use app_core::{brand, Config};
 use app_ipc::RecorderStatus;
 use app_media::{HwPreference, Player};
 use gpui_kit::component::input::{InputEvent, InputState};
+use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
@@ -565,7 +566,7 @@ impl Shell {
                         .flex_col()
                         .gap(px(2.))
                         .min_h_0()
-                        .overflow_y_scroll()
+                        .overflow_y_scrollbar()
                         .child(
                             div()
                                 .px(px(10.))
@@ -897,7 +898,7 @@ impl Render for Shell {
             .id("content")
             .flex_1()
             .min_h_0()
-            .overflow_y_scroll()
+            .overflow_y_scrollbar()
             .child(list);
 
         let server_modal = self.server_modal_view(cx);

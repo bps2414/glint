@@ -10,6 +10,7 @@
 use std::borrow::Cow;
 use std::cell::Cell;
 
+use gpui_kit::component::scroll::ScrollbarMode;
 use gpui_kit::component::theme::{Theme, ThemeMode, ThemeRegistry};
 use gpui_kit::*;
 
@@ -280,6 +281,8 @@ pub fn install(cx: &mut App) -> anyhow::Result<()> {
     theme.dark_theme = dark;
     theme.light_theme = light;
     Theme::change(ThemeMode::Dark, None, cx);
+    // Barra de rolagem sempre à vista (dá pra clicar e arrastar), não só ao rolar.
+    Theme::set_scrollbar_mode(ScrollbarMode::Always, cx);
     Ok(())
 }
 
