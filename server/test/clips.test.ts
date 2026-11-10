@@ -172,6 +172,7 @@ describe("upload e página do clipe", () => {
     expect(over.body.error.code).toBe("quota_exceeded");
     expect(over.body.error.used_bytes).toBe(6010);
     expect(over.body.error.quota_bytes).toBe(10000);
+    expect(over.body.error.needed_bytes).toBe(1010);
     const me = await json(u, "GET", "/me");
     expect(me.body.quota).toEqual({ used_bytes: 6010, quota_bytes: 10000 });
     // Apagar libera.
@@ -207,6 +208,37 @@ describe("upload e página do clipe", () => {
     const list = await json(a, "GET", "/clips");
     expect((await json(a, "DELETE", `/clips/${list.body.clips[0].id}`)).status).toBe(204);
     expect((await json(b, "POST", "/clips", { ...meta, size_bytes: 5000 })).status).toBe(201);
+  });
+
+  it("sem espaço: sugere os mais antigos sem favoritos e não apaga nada", async () => {
+    vars.STORAGE_LIMIT_GB = "0.00001"; // 10737 bytes
+    const b = await adminBrowser();
+    const c1 = (await publish(b, 3000)).clip;
+    clock.now += 1000;
+    const c2 = (await publish(b, 3000, { favorite: true })).clip;
+    clock.now += 1000;
+    const c3 = (await publish(b, 3000)).clip;
+    expect(c2.favorite).toBe(true);
+    expect(c1.favorite).toBe(false);
+
+    const full = await json(b, "POST", "/clips", { ...meta, size_bytes: 5000 });
+    expect(full.status).toBe(507);
+    expect(full.body.error.needed_bytes).toBe(3 * 3010 + 5000 - 10737);
+
+    const s = await json(b, "GET", `/clips/cleanup?bytes=${full.body.error.needed_bytes}`);
+    expect(s.status).toBe(200);
+    expect(s.body.clips.map((c: Json) => c.id)).toEqual([c1.id, c3.id]);
+    expect(s.body.freed_bytes).toBe(6020);
+    expect(s.body.enough).toBe(true);
+
+    // Favoritar pelo PATCH tira da lista; aí não dá mais.
+    expect((await json(b, "PATCH", `/clips/${c1.id}`, { favorite: true })).body.clip.favorite).toBe(true);
+    const s2 = await json(b, "GET", `/clips/cleanup?bytes=${full.body.error.needed_bytes}`);
+    expect(s2.body.clips.map((c: Json) => c.id)).toEqual([c3.id]);
+    expect(s2.body.enough).toBe(false);
+
+    expect((await json(b, "GET", "/clips")).body.clips).toHaveLength(3);
+    expect((await json(b, "GET", "/clips/cleanup?bytes=0")).status).toBe(400);
   });
 
   it("trava global: padrão de 9,5 GB aceita clipes normais e recusa o que passa", async () => {

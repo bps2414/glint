@@ -12,7 +12,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use app_cloud::{clip_id_from_url, login, Client, CloudError, Visibility};
+use app_cloud::{clip_id_from_url, login, Cleanup, Client, CloudError, Visibility};
 use app_core::{brand, library::Clip, Config};
 use app_media::ExportOptions;
 use gpui_kit::component::scroll::ScrollableElement as _;
@@ -46,6 +46,21 @@ pub enum Remote {
     Saving(Visibility),
     /// O servidor não tem (apagado pelo site ou é de outra conta).
     Missing,
+}
+
+/// "Liberar espaço": quando o servidor (ou a cota) enche, o app mostra os clipes mais antigos
+/// do usuário no servidor, sem os favoritos, e só apaga o que ele confirmar. Nada é apagado
+/// sozinho.
+pub struct MakeRoom {
+    /// Quanto falta liberar.
+    needed: u64,
+    state: RoomState,
+}
+
+enum RoomState {
+    Loading,
+    Ready(Cleanup),
+    Deleting,
 }
 
 /// Clipe esperando a vez na fila de publicação.
@@ -266,6 +281,7 @@ impl Shell {
             title: publish_title(&c),
             game: c.game.clone(),
             visibility: vis,
+            favorite: c.favorite,
             base,
             token: self.token.clone(),
             login,
@@ -335,13 +351,20 @@ impl Shell {
                 cx.notify();
                 false
             }
-            // Servidor cheio: os da fila também falhariam, então ela é desfeita.
+            // Sem espaço: os da fila também falhariam, então ela é desfeita. Servidor 1.1+
+            // diz quanto falta: abre "Liberar espaço" (mostra o que sairia, não apaga nada).
             Phase::Failed(Failure::StorageFull {
                 used_bytes,
                 limit_bytes,
+                needed_bytes,
+                quota,
             }) => {
                 self.queue.clear();
-                self.notify_user(storage_full_text(used_bytes, limit_bytes), cx);
+                match needed_bytes {
+                    Some(n) => self.open_make_room(n, cx),
+                    None => self
+                        .notify_user(space_text(used_bytes, limit_bytes, needed_bytes, quota), cx),
+                }
                 cx.notify();
                 false
             }
@@ -633,6 +656,302 @@ impl Shell {
             v.remote = Remote::Unknown;
         }
         self.notify_user(tr("publish.unpublished"), cx);
+    }
+
+    /// Favoritou ou desfavoritou um clipe publicado: o servidor guarda (favorito nunca é
+    /// sugerido para apagar). Servidor antigo responde 400 e é ignorado.
+    pub fn sync_favorite(&mut self, id: i64, on: bool, cx: &mut Context<Self>) {
+        let (Some(sid), Some(client)) = (self.server_id(id), self.client()) else {
+            return;
+        };
+        cx.spawn(async move |this, cx| {
+            let r = cx
+                .background_executor()
+                .spawn(async move { client.set_favorite(&sid, on) })
+                .await;
+            let _ = this.update(cx, |t, cx| match r {
+                Ok(_)
+                | Err(CloudError::Api {
+                    status: 400 | 404, ..
+                }) => {}
+                Err(e) => {
+                    if matches!(e, CloudError::Unauthorized) {
+                        t.session_expired();
+                    }
+                    t.notify_user(
+                        tr_args("publish.favorite_error", &[("error", &e.to_string())]),
+                        cx,
+                    );
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// Abre "Liberar espaço" e pede ao servidor o que apagar para liberar `needed` bytes.
+    /// Antes manda os favoritos deste PC (clipes publicados antes do servidor guardar o
+    /// favorito), para nenhum deles entrar na lista.
+    pub fn open_make_room(&mut self, needed: u64, cx: &mut Context<Self>) {
+        let Some(client) = self.client() else {
+            return;
+        };
+        let favorites: Vec<String> = self
+            .store
+            .clips
+            .iter()
+            .filter(|c| c.favorite)
+            .filter_map(|c| clip_id_from_url(c.published_url.as_deref()?).map(str::to_string))
+            .collect();
+        self.make_room = Some(MakeRoom {
+            needed,
+            state: RoomState::Loading,
+        });
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let r = cx
+                .background_executor()
+                .spawn(async move {
+                    for sid in &favorites {
+                        if let Err(e) = client.set_favorite(sid, true) {
+                            tracing::debug!("favorito {sid} no servidor: {e}");
+                        }
+                    }
+                    client.cleanup(needed)
+                })
+                .await;
+            let _ = this.update(cx, |t, cx| {
+                // Fechado enquanto carregava.
+                if t.make_room.is_none() {
+                    return;
+                }
+                match r {
+                    Ok(c) => {
+                        t.make_room = Some(MakeRoom {
+                            needed,
+                            state: RoomState::Ready(c),
+                        });
+                    }
+                    Err(e) => {
+                        if matches!(e, CloudError::Unauthorized) {
+                            t.session_expired();
+                        }
+                        t.make_room = None;
+                        t.notify_user(
+                            tr_args("publish.room_error", &[("error", &e.to_string())]),
+                            cx,
+                        );
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn close_make_room(&mut self, cx: &mut Context<Self>) {
+        if !matches!(
+            self.make_room.as_ref().map(|r| &r.state),
+            Some(RoomState::Deleting)
+        ) {
+            self.make_room = None;
+            cx.notify();
+        }
+    }
+
+    /// O usuário confirmou: apaga do servidor exatamente os clipes mostrados, tira o link
+    /// deles da biblioteca e tenta publicar de novo.
+    fn confirm_make_room(&mut self, cx: &mut Context<Self>) {
+        let Some(MakeRoom {
+            state: RoomState::Ready(c),
+            ..
+        }) = self.make_room.as_ref()
+        else {
+            return;
+        };
+        if !c.enough || c.clips.is_empty() {
+            return;
+        }
+        let Some(client) = self.client() else {
+            return;
+        };
+        let targets: Vec<(String, u64)> = c
+            .clips
+            .iter()
+            .map(|c| (c.id.clone(), c.size_bytes))
+            .collect();
+        if let Some(r) = self.make_room.as_mut() {
+            r.state = RoomState::Deleting;
+        }
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let (deleted, err) = cx
+                .background_executor()
+                .spawn(async move {
+                    let mut deleted = Vec::new();
+                    for (id, size) in targets {
+                        match client.delete_clip(&id) {
+                            Ok(()) | Err(CloudError::Api { status: 404, .. }) => {
+                                deleted.push((id, size))
+                            }
+                            Err(e) => return (deleted, Some(e)),
+                        }
+                    }
+                    (deleted, None)
+                })
+                .await;
+            let _ = this.update(cx, |t, cx| {
+                t.make_room = None;
+                let gone: Vec<i64> = t
+                    .store
+                    .clips
+                    .iter()
+                    .filter(|c| {
+                        c.published_url
+                            .as_deref()
+                            .and_then(clip_id_from_url)
+                            .is_some_and(|sid| deleted.iter().any(|(id, _)| id == sid))
+                    })
+                    .map(|c| c.id)
+                    .collect();
+                for id in gone {
+                    t.store.set_published(id, None);
+                    if let Some(v) = t.clip.as_mut().filter(|v| v.id == id) {
+                        v.remote = Remote::Unknown;
+                    }
+                }
+                match err {
+                    Some(e) => {
+                        if matches!(e, CloudError::Unauthorized) {
+                            t.session_expired();
+                        }
+                        t.notify_user(
+                            tr_args("publish.room_error", &[("error", &e.to_string())]),
+                            cx,
+                        );
+                    }
+                    None => {
+                        let freed: u64 = deleted.iter().map(|(_, s)| s).sum();
+                        t.notify_user(
+                            tr_args("publish.room_freed", &[("size", &format::size(freed))]),
+                            cx,
+                        );
+                        let retry = t
+                            .job
+                            .as_ref()
+                            .filter(|j| !j.phase.running())
+                            .map(|j| (j.clip_id, j.vis));
+                        if let Some((id, vis)) = retry {
+                            t.start_publish(id, vis, cx);
+                        }
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Modal "Liberar espaço" (por cima da biblioteca ou da tela do clipe).
+    pub fn make_room_modal(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let r = self.make_room.as_ref()?;
+        let needed = format::size(r.needed);
+        let deleting = matches!(r.state, RoomState::Deleting);
+        let close = |label: &'static str| {
+            Btn::new("room-cancel", BtnKind::Secondary, tr(label))
+                .disabled(deleting)
+                .on_click(cx.listener(|this, _, _, cx| this.close_make_room(cx)))
+        };
+        let col = || div().flex().flex_col().gap(px(10.));
+        let (body, cancel, ok) = match &r.state {
+            RoomState::Loading => (
+                col().child(tr("publish.room_loading")),
+                close("clip.cancel"),
+                None,
+            ),
+            RoomState::Deleting => (
+                col().child(tr("publish.room_deleting")),
+                close("clip.cancel"),
+                None,
+            ),
+            RoomState::Ready(c) if !c.enough || c.clips.is_empty() => (
+                col()
+                    .child(tr_args("publish.room_not_enough", &[("needed", &needed)]))
+                    .child(hint(tr("publish.room_fav_hint"))),
+                close("publish.dismiss"),
+                None,
+            ),
+            RoomState::Ready(c) => {
+                let rows = c.clips.iter().map(|clip| {
+                    div()
+                        .flex()
+                        .flex_row()
+                        .items_baseline()
+                        .gap(px(10.))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
+                                .text_color(tok::fg())
+                                .child(clip.title.clone()),
+                        )
+                        .child(
+                            div()
+                                .flex_none()
+                                .font_family(FONT_NUM)
+                                .text_size(px(12.))
+                                .text_color(tok::muted())
+                                .child(format!(
+                                    "{} · {}",
+                                    format::full_date(clip.created_at),
+                                    format::size(clip.size_bytes)
+                                )),
+                        )
+                });
+                let list = div()
+                    .id("room-list")
+                    .max_h(px(220.))
+                    .overflow_y_scrollbar()
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .p(px(10.))
+                    .bg(tok::field())
+                    .border_1()
+                    .border_color(tok::edge())
+                    .rounded(R_SM)
+                    .children(rows);
+                let ok = Btn::new(
+                    "room-ok",
+                    BtnKind::Danger,
+                    tr_args(
+                        "publish.room_confirm",
+                        &[("count", &c.clips.len().to_string())],
+                    ),
+                )
+                .icon(icon::TRASH)
+                .on_click(cx.listener(|this, _, _, cx| this.confirm_make_room(cx)));
+                (
+                    col()
+                        .child(tr_args("publish.room_body", &[("needed", &needed)]))
+                        .child(list)
+                        .child(hint(tr("publish.room_fav_hint"))),
+                    close("clip.cancel"),
+                    Some(ok),
+                )
+            }
+        };
+        Some(
+            crate::components::modal::confirm(
+                "room-modal",
+                tr("publish.room_title"),
+                body,
+                None,
+                cancel,
+                ok,
+            )
+            .into_any_element(),
+        )
     }
 
     // ---------- desenho ----------
@@ -1064,13 +1383,22 @@ impl Shell {
                 .child(progress(tr("publish.finishing"), percent(1.0), 1.0))
                 .into_any_element(),
             Phase::Failed(f) => {
+                let room = match f {
+                    Failure::StorageFull {
+                        needed_bytes: Some(n),
+                        ..
+                    } => Some(*n),
+                    _ => None,
+                };
                 let (text, again) = match f {
                     Failure::Session => (tr("publish.session"), tr("publish.login_again")),
                     Failure::StorageFull {
                         used_bytes,
                         limit_bytes,
+                        needed_bytes,
+                        quota,
                     } => (
-                        storage_full_text(*used_bytes, *limit_bytes),
+                        space_text(*used_bytes, *limit_bytes, *needed_bytes, *quota),
                         tr("publish.retry"),
                     ),
                     Failure::Error(e) => (
@@ -1081,12 +1409,31 @@ impl Shell {
                 };
                 col()
                     .child(status_text(text, None))
+                    .when_some(room, |d, n| {
+                        d.child(
+                            Btn::new("pub-room", BtnKind::Primary, tr("publish.room_open"))
+                                .icon(icon::TRASH)
+                                .size(Size::Lg)
+                                .full_width()
+                                .on_click(
+                                    cx.listener(move |this, _, _, cx| this.open_make_room(n, cx)),
+                                ),
+                        )
+                    })
                     .child(
-                        Btn::new("pub-retry", BtnKind::Primary, again)
-                            .icon(icon::UPLOAD)
-                            .size(Size::Lg)
-                            .full_width()
-                            .on_click(cx.listener(|this, _, _, cx| this.publish_clicked(cx))),
+                        Btn::new(
+                            "pub-retry",
+                            if room.is_some() {
+                                BtnKind::Secondary
+                            } else {
+                                BtnKind::Primary
+                            },
+                            again,
+                        )
+                        .icon(icon::UPLOAD)
+                        .size(Size::Lg)
+                        .full_width()
+                        .on_click(cx.listener(|this, _, _, cx| this.publish_clicked(cx))),
                     )
                     .child(
                         Btn::new("pub-dismiss", BtnKind::Ghost, tr("publish.dismiss"))
@@ -1220,6 +1567,12 @@ impl Shell {
                 .gap(px(18.))
                 .child(section)
                 .child(vis)
+                // Incentivo: favorito nunca é sugerido para apagar quando o servidor enche.
+                .child(hint(tr(if c.favorite {
+                    "publish.favorite_kept"
+                } else {
+                    "publish.favorite_hint"
+                })))
                 .into_any_element(),
         )
     }
@@ -1286,10 +1639,16 @@ pub(crate) fn login_page() -> String {
     )
 }
 
-/// Aviso de servidor cheio, com o que está usado do limite.
-fn storage_full_text(used_bytes: u64, limit_bytes: u64) -> SharedString {
+/// Aviso de falta de espaço, com o que está usado do limite. Servidor antigo (sem
+/// `needed`) não sugere o que apagar: o texto manda pedir ao dono.
+fn space_text(used_bytes: u64, limit_bytes: u64, needed: Option<u64>, quota: bool) -> SharedString {
+    let key = match (needed, quota) {
+        (Some(_), true) => "publish.quota_full",
+        (Some(_), false) => "publish.storage_full_short",
+        (None, _) => "publish.storage_full",
+    };
     tr_args(
-        "publish.storage_full",
+        key,
         &[
             ("used", &format::size(used_bytes)),
             ("limit", &format::size(limit_bytes)),

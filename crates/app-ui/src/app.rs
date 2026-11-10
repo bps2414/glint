@@ -32,7 +32,7 @@ use crate::theme::{self, tok, FONT_UI, R_PANEL, R_SM};
 use crate::thumbs::{self, Thumbs};
 use crate::updater::UpdateState;
 use crate::views::clip::ClipView;
-use crate::views::publish::Queued;
+use crate::views::publish::{MakeRoom, Queued};
 use crate::views::server::{JoinView, ServerModal};
 use crate::views::settings::SettingsView;
 use crate::{tr, tr_args};
@@ -86,6 +86,8 @@ pub struct Shell {
     pub job: Option<Job>,
     /// Clipes esperando a vez de publicar.
     pub queue: Vec<Queued>,
+    /// "Liberar espaço": o que apagar do servidor (só com a confirmação do usuário).
+    pub make_room: Option<MakeRoom>,
     /// "Exportar MP4" em andamento (um por vez).
     pub export: Option<Export>,
     /// Clipes selecionados na biblioteca (Ctrl+clique).
@@ -197,6 +199,7 @@ impl Shell {
             token: secret::load(),
             job: None,
             queue: Vec::new(),
+            make_room: None,
             export: None,
             selected: HashSet::new(),
             settings: None,
@@ -409,6 +412,7 @@ impl Shell {
         if let Some(i) = self.store.index_of(id) {
             let on = !self.store.clips[i].favorite;
             self.store.set_favorite(id, on);
+            self.sync_favorite(id, on, cx);
             cx.notify();
         }
     }
@@ -868,6 +872,7 @@ impl Render for Shell {
         // desenhada; o player redesenha a cada quadro).
         if self.clip.is_some() {
             let modal = self.clip_modal(cx);
+            let room = self.make_room_modal(cx);
             let join = self.join_modal(window, cx);
             let create = self.create_modal(window, cx);
             let feedback = self.feedback_modal(window, cx);
@@ -885,6 +890,7 @@ impl Render for Shell {
                         .children(notice),
                 )
                 .children(modal)
+                .children(room)
                 .children(join)
                 .children(create)
                 .children(feedback);
@@ -902,6 +908,7 @@ impl Render for Shell {
             .child(list);
 
         let server_modal = self.server_modal_view(cx);
+        let room = self.make_room_modal(cx);
         let join = self.join_modal(window, cx);
         let create = self.create_modal(window, cx);
         let feedback = self.feedback_modal(window, cx);
@@ -920,6 +927,7 @@ impl Render for Shell {
                     .children(notice),
             )
             .children(server_modal)
+            .children(room)
             .children(join)
             .children(create)
             .children(feedback)

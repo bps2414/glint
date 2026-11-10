@@ -82,7 +82,7 @@ pub struct VideoSettings {
 /// Opções privadas por família de encoder. Chaves desconhecidas são
 /// ignoradas pelo FFmpeg (e logadas por nós), então variações entre versões
 /// do driver/FFmpeg não quebram a abertura.
-fn private_options(name: &str) -> &'static [(&'static str, &'static str)] {
+pub(crate) fn private_options(name: &str) -> &'static [(&'static str, &'static str)] {
     if name.ends_with("_amf") {
         &[
             ("usage", "transcoding"),
@@ -128,6 +128,18 @@ impl VideoEncoder {
         pix_fmt: ff::AVPixelFormat,
         hw_frames: *mut ff::AVBufferRef,
     ) -> Result<Self> {
+        Self::open_with(name, settings, pix_fmt, hw_frames, private_options(name))
+    }
+
+    /// Como [`VideoEncoder::open`], com opções privadas próprias (o publicar usa presets de
+    /// qualidade em vez dos de tempo real do gravador).
+    pub(crate) unsafe fn open_with(
+        name: &str,
+        settings: &VideoSettings,
+        pix_fmt: ff::AVPixelFormat,
+        hw_frames: *mut ff::AVBufferRef,
+        options: &[(&str, &str)],
+    ) -> Result<Self> {
         let codec = find_encoder(name).ok_or_else(|| MediaError::NoEncoder(name.into()))?;
         let mut ctx = ff::avcodec_alloc_context3(codec);
         if ctx.is_null() {
@@ -160,7 +172,7 @@ impl VideoEncoder {
         }
 
         let mut opts: *mut ff::AVDictionary = ptr::null_mut();
-        for (k, v) in private_options(name) {
+        for (k, v) in options {
             let k = CString::new(*k).expect("sem NUL");
             let v = CString::new(*v).expect("sem NUL");
             ff::av_dict_set(&mut opts, k.as_ptr(), v.as_ptr(), 0);

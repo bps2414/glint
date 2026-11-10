@@ -508,8 +508,10 @@ impl Shell {
                             cx.notify();
                         }),
                     ),
-                    Btn::new("srv-leave-yes", BtnKind::Danger, tr("server.leave"))
-                        .on_click(cx.listener(|this, _, _, cx| this.leave_server(cx))),
+                    Some(
+                        Btn::new("srv-leave-yes", BtnKind::Danger, tr("server.leave"))
+                            .on_click(cx.listener(|this, _, _, cx| this.leave_server(cx))),
+                    ),
                 )
                 .into_any_element(),
             ),

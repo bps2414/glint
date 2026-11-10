@@ -64,11 +64,31 @@ pub struct Exported {
     pub size_bytes: u64,
 }
 
-/// Bitrate do vídeo publicado: ~0,1 bit por pixel por quadro (12 Mbps em
-/// 1080p60), entre 2 e 16 Mbps.
+/// Bitrate do vídeo publicado: ~0,0965 bit por pixel por quadro (12 Mbps em
+/// 1080p60), entre 2 e 16 Mbps. Com o preset de qualidade e o GOP de 5 s
+/// ([`export_options`], [`GOP_SECS`]) dá o mesmo VMAF que 12,4 Mbps no preset
+/// "balanced" com GOP de 2 s (medido em clipes de VALORANT no h264_amf), ~4% menor.
 pub fn bitrate_kbps(width: u32, height: u32, fps: u32) -> u32 {
-    let bits = f64::from(width) * f64::from(height) * f64::from(fps) * 0.1;
+    let bits = f64::from(width) * f64::from(height) * f64::from(fps) * 0.0965;
     ((bits / 1000.0) as u32).clamp(2_000, 16_000)
+}
+
+/// Keyframe a cada 5 s: o MP4 publicado é tocado do começo (ou com seek pelo navegador),
+/// não precisa de GOP curto, e cada keyframe a menos sobra para o resto dos quadros.
+const GOP_SECS: u32 = 5;
+
+/// Opções do encoder no publicar: sem pressa de tempo real (o jogo está fechado ou o
+/// usuário pediu), então o AMF usa o preset "quality" em vez do "balanced" do gravador.
+fn export_options(name: &str) -> &'static [(&'static str, &'static str)] {
+    if name.ends_with("_amf") {
+        &[
+            ("usage", "transcoding"),
+            ("quality", "quality"),
+            ("rc", "vbr_peak"),
+        ]
+    } else {
+        crate::video::private_options(name)
+    }
 }
 
 /// Tamanho de saída: cabe em `max_height`, mantém a proporção, lados pares.
@@ -130,7 +150,7 @@ pub fn export_mp4(
         height: h,
         fps,
         bitrate_kbps: bitrate_kbps(w, h, fps),
-        gop: fps * 2,
+        gop: fps * GOP_SECS,
     };
     let (mut venc, pix) = open_h264(&settings)?;
     let total = ((end - start) as f64 * f64::from(fps) / 1000.0).max(1.0);
@@ -215,7 +235,8 @@ fn open_h264(settings: &VideoSettings) -> Result<(VideoEncoder, ff::AVPixelForma
         } else {
             ff::AVPixelFormat::AV_PIX_FMT_YUV420P
         };
-        match unsafe { VideoEncoder::open(name, settings, pix, ptr::null_mut()) } {
+        let opts = export_options(name);
+        match unsafe { VideoEncoder::open_with(name, settings, pix, ptr::null_mut(), opts) } {
             Ok(e) => return Ok((e, pix)),
             Err(e) => tracing::info!("encoder {name} não abriu: {e}"),
         }
@@ -315,7 +336,7 @@ mod tests {
         assert_eq!(output_size(2560, 1440, 1080), (1920, 1080));
         assert_eq!(output_size(3440, 1440, 1080), (2580, 1080));
         assert_eq!(output_size(1365, 767, 1080), (1364, 766));
-        assert_eq!(bitrate_kbps(1920, 1080, 60), 12_441);
+        assert_eq!(bitrate_kbps(1920, 1080, 60), 12_006);
         assert_eq!(bitrate_kbps(640, 360, 30), 2_000);
     }
 

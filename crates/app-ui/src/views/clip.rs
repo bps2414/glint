@@ -502,6 +502,13 @@ impl Shell {
             return false;
         }
         let key = e.keystroke.key.as_str();
+        // "Liberar espaço" aberto: só Esc (fecha); nada de apagar ou navegar por baixo dele.
+        if self.make_room.is_some() {
+            if key == "escape" {
+                self.close_make_room(cx);
+            }
+            return true;
+        }
         if v.confirm_delete {
             match key {
                 "escape" => self.ask_delete(false, cx),
@@ -1037,9 +1044,11 @@ impl Shell {
             self.clip_blur(),
             Btn::new("del-cancel", BtnKind::Secondary, tr("clip.cancel"))
                 .on_click(cx.listener(|this, _, _, cx| this.ask_delete(false, cx))),
-            Btn::new("del-ok", BtnKind::Danger, tr("clip.delete"))
-                .icon(icon::TRASH)
-                .on_click(cx.listener(|this, _, window, cx| this.delete_clip(window, cx))),
+            Some(
+                Btn::new("del-ok", BtnKind::Danger, tr("clip.delete"))
+                    .icon(icon::TRASH)
+                    .on_click(cx.listener(|this, _, window, cx| this.delete_clip(window, cx))),
+            ),
         )
     }
 
@@ -1051,9 +1060,11 @@ impl Shell {
             self.clip_blur(),
             Btn::new("unpub-cancel", BtnKind::Secondary, tr("clip.cancel"))
                 .on_click(cx.listener(|this, _, _, cx| this.ask_unpublish(false, cx))),
-            Btn::new("unpub-ok", BtnKind::Danger, tr("publish.unpublish"))
-                .icon(icon::TRASH)
-                .on_click(cx.listener(|this, _, _, cx| this.unpublish(cx))),
+            Some(
+                Btn::new("unpub-ok", BtnKind::Danger, tr("publish.unpublish"))
+                    .icon(icon::TRASH)
+                    .on_click(cx.listener(|this, _, _, cx| this.unpublish(cx))),
+            ),
         )
     }
 }

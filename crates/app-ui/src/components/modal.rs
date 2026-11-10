@@ -14,15 +14,16 @@ use super::{glass, Btn};
 use crate::theme::size::Size;
 use crate::theme::{pal, tok, FONT_UI, R_PANEL};
 
-/// Véu por cima de tudo + cartão centralizado com título, texto e dois botões. Com
-/// `backdrop` (miniatura desfocada do clipe), o cartão é vidro fosco sobre ela.
+/// Véu por cima de tudo + cartão centralizado com título, texto e dois botões (ou só o de
+/// cancelar, com `ok = None`). Com `backdrop` (miniatura desfocada do clipe), o cartão é
+/// vidro fosco sobre ela.
 pub fn confirm(
     id: &'static str,
     title: SharedString,
-    body: SharedString,
+    body: impl IntoElement,
     backdrop: Option<Arc<RenderImage>>,
     cancel: Btn,
-    ok: Btn,
+    ok: Option<Btn>,
 ) -> impl IntoElement {
     let p = pal();
     // Base do cartão: a janela sólida do tema (o vidro aqui ficaria ilegível sobre o vídeo).
@@ -80,7 +81,7 @@ pub fn confirm(
                     .gap(px(8.))
                     .pt(px(10.))
                     .child(cancel.size(Size::Md))
-                    .child(ok.size(Size::Md)),
+                    .when_some(ok, |d, ok| d.child(ok.size(Size::Md))),
             ),
         )
 }

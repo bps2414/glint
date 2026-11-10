@@ -20,6 +20,8 @@ export interface ClipRow {
   upload_id: string | null;
   created_at: number;
   ready_at: number | null;
+  /** 1 = favorito: nunca entra na sugestão do que apagar para liberar espaço. */
+  favorite: number;
 }
 
 export const videoKey = (id: string) => `clips/${id}/video.mp4`;
@@ -90,6 +92,7 @@ export async function clipDto(c: Context<AppEnv>, clip: ClipRow) {
     duration_ms: clip.duration_ms,
     width: clip.width,
     height: clip.height,
+    favorite: clip.favorite === 1,
     created_at: clip.created_at,
     url: urls?.page ?? null,
     video_url: urls?.video ?? null,

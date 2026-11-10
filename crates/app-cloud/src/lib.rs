@@ -20,7 +20,7 @@ mod publish;
 pub mod update;
 
 pub use api::{
-    clip_id_from_url, ApiErrorBody, Client, Clip, CloudError, Device, LinkCode, Me, Member,
-    NewClip, ServerInfo, UploadState, User, Visibility, API_VERSION,
+    clip_id_from_url, ApiErrorBody, Cleanup, Client, Clip, CloudError, Device, LinkCode, Me,
+    Member, NewClip, ServerInfo, UploadState, User, Visibility, API_VERSION,
 };
 pub use publish::{publish, Progress, Stage};

@@ -67,7 +67,7 @@ Sempre neste formato, com `message` em PT-BR pronta para mostrar:
 | 409 | `already_setup` | `setup` num servidor que já tem usuário |
 | 409 | `self` | Admin tentando desativar a própria conta |
 | 404 | `not_found` | Não existe **ou é de outra pessoa** |
-| 409 | `quota_exceeded` | Passaria da cota do usuário (só com `USER_QUOTA_GB` > 0) (`used_bytes`, `quota_bytes`) |
+| 409 | `quota_exceeded` | Passaria da cota do usuário (só com `USER_QUOTA_GB` > 0) (`used_bytes`, `quota_bytes`, `needed_bytes`) |
 | 409 | `missing_parts` | `complete` antes de todas as partes (`parts_done`, `part_count`) |
 | 409 | `not_uploading` | Parte enviada para clipe já concluído |
 | 411 | `length_required` | Parte sem `Content-Length` |
@@ -75,7 +75,7 @@ Sempre neste formato, com `message` em PT-BR pronta para mostrar:
 | 422 | `bad_video` | Arquivo final não é MP4 ou o tamanho não confere (o clipe é apagado) |
 | 429 | `rate_limited` | Muitas requisições |
 | 500 | `server` | Erro interno |
-| 507 | `storage_full` | O servidor inteiro passaria de `STORAGE_LIMIT_GB` (`used_bytes`, `limit_bytes`); não adianta tentar de novo |
+| 507 | `storage_full` | O servidor inteiro passaria de `STORAGE_LIMIT_GB` (`used_bytes`, `limit_bytes`, `needed_bytes`); só adianta tentar de novo depois de liberar `needed_bytes` |
 
 ## Tipos
 
@@ -92,6 +92,7 @@ interface Clip {
   duration_ms: number;
   width: number;
   height: number;
+  favorite: boolean;       // nunca entra em GET /clips/cleanup
   created_at: number;      // ms desde a época
   url: string | null;      // página do clipe (para copiar/colar no Discord); null enquanto "uploading"
   video_url: string | null;// MP4 direto; privado = URL assinada que vence em 1 h
@@ -133,7 +134,7 @@ igual a `name`); `display_name` e `avatar_url` só vêm do Discord (`null` sem D
 1. `POST /api/v1/clips`
    ```json
    { "title": "Ace", "game": "VALORANT", "visibility": "unlisted",
-     "size_bytes": 12345678, "duration_ms": 30000, "width": 1920, "height": 1080 }
+     "size_bytes": 12345678, "duration_ms": 30000, "width": 1920, "height": 1080, "favorite": false }
    ```
    → `201 { "clip": Clip, "upload": UploadState }`. Reserva `size_bytes` na cota.
    Upload não concluído em **24 h** é apagado e libera a cota.
@@ -155,7 +156,11 @@ para tocar no navegador e no embed do Discord.
 
 - `GET /api/v1/clips?before=<created_at>` → `{ "clips": Clip[], "next_before": number | null }` (50 por página, mais novo primeiro).
 - `GET /api/v1/clips/<id>` → `{ "clip": Clip, "upload": UploadState | null }`.
-- `PATCH /api/v1/clips/<id>` com `{ "title"?: string, "visibility"?: Visibility }` → `{ "clip": Clip }`.
+- `PATCH /api/v1/clips/<id>` com `{ "title"?: string, "visibility"?: Visibility, "favorite"?: boolean }` → `{ "clip": Clip }`.
+- `GET /api/v1/clips/cleanup?bytes=<n>` → `{ "clips": Clip[], "freed_bytes": number, "enough": boolean }`: os clipes
+  prontos mais antigos do usuário, **sem os favoritos**, até somar `n` bytes (`needed_bytes` do erro de espaço).
+  Não apaga nada: o app mostra a lista e apaga com `DELETE` só o que o usuário confirmar. `enough: false` = nem
+  apagando todos eles cabe.
 - `DELETE /api/v1/clips/<id>` → `204` (apaga vídeo e miniatura do R2 e libera a cota).
 
 ### Admin (role `admin`; outro usuário recebe `403 forbidden`)

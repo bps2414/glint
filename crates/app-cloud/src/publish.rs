@@ -313,6 +313,7 @@ mod tests {
             duration_ms: 1000,
             width: 2,
             height: 2,
+            favorite: false,
         }
     }
 

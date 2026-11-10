@@ -52,11 +52,12 @@ const createSchema = z.object({
   duration_ms: z.int().min(1).max(30 * 60_000),
   width: z.int().min(16).max(7680),
   height: z.int().min(16).max(4320),
+  favorite: z.boolean().default(false),
 });
 
 const patchSchema = z
-  .object({ title: text(100).optional(), visibility: visibility.optional() })
-  .refine((o) => o.title !== undefined || o.visibility !== undefined);
+  .object({ title: text(100).optional(), visibility: visibility.optional(), favorite: z.boolean().optional() })
+  .refine((o) => o.title !== undefined || o.visibility !== undefined || o.favorite !== undefined);
 
 async function jsonBody(c: Ctx): Promise<unknown> {
   return c.req.json().catch(() => undefined);
@@ -115,8 +116,8 @@ api.post("/clips", async (c) => {
   const quota = userQuota(c.var.config, user);
   const limit = c.var.config.storageLimitBytes;
   const res = await c.env.DB.prepare(
-    `INSERT INTO clips (id, user_id, title, game, visibility, status, size_bytes, duration_ms, width, height, upload_id, created_at)
-     SELECT ?, ?, ?, ?, ?, 'uploading', ?, ?, ?, ?, ?, ?
+    `INSERT INTO clips (id, user_id, title, game, visibility, status, size_bytes, duration_ms, width, height, upload_id, created_at, favorite)
+     SELECT ?, ?, ?, ?, ?, 'uploading', ?, ?, ?, ?, ?, ?, ?
       WHERE (SELECT COALESCE(SUM(size_bytes + thumb_bytes), 0) FROM clips) + ? <= ?
         AND (? = 0 OR (SELECT COALESCE(SUM(size_bytes + thumb_bytes), 0) FROM clips WHERE user_id = ?) + ? <= ?)`,
   )
@@ -132,6 +133,7 @@ api.post("/clips", async (c) => {
       b.height,
       mp.uploadId,
       now,
+      b.favorite ? 1 : 0,
       b.size_bytes,
       limit,
       quota,
@@ -142,14 +144,22 @@ api.post("/clips", async (c) => {
     .run();
   if (!res.meta.changes) {
     await mp.abort();
+    // `needed_bytes`: quanto falta liberar para este clipe caber (o app sugere o que apagar
+    // com GET /clips/cleanup e só apaga com a confirmação do usuário).
     const used = await usedBytes(c.env.DB, user.id);
     if (quota > 0 && used + b.size_bytes > quota) {
-      return apiError(c, 409, "quota_exceeded", t.api.quota, { used_bytes: used, quota_bytes: quota });
+      return apiError(c, 409, "quota_exceeded", t.api.quota, {
+        used_bytes: used,
+        quota_bytes: quota,
+        needed_bytes: used + b.size_bytes - quota,
+      });
     }
-    // Servidor cheio (trava global): 507, o app mostra o motivo e não tenta de novo.
+    // Servidor cheio (trava global): 507, o app mostra o motivo e não tenta de novo sozinho.
+    const total = await totalBytes(c.env.DB);
     return apiError(c, 507, "storage_full", t.api.storageFull, {
-      used_bytes: await totalBytes(c.env.DB),
+      used_bytes: total,
       limit_bytes: limit,
+      needed_bytes: Math.max(1, total + b.size_bytes - limit),
     });
   }
   const clip = (await c.env.DB.prepare("SELECT * FROM clips WHERE id = ?").bind(id).first<ClipRow>())!;
@@ -167,6 +177,30 @@ api.get("/clips", async (c) => {
   const clips = await Promise.all(results.map((r) => clipDto(c, r)));
   const last = results.at(-1);
   return c.json({ clips, next_before: results.length === limit && last ? last.created_at : null });
+});
+
+// Sugestão do que apagar para liberar `bytes`: os clipes prontos mais antigos do usuário,
+// nunca os favoritos. Não apaga nada; o app mostra a lista e apaga só o que o usuário confirmar.
+api.get("/clips/cleanup", async (c) => {
+  const bytes = Number(c.req.query("bytes"));
+  if (!Number.isSafeInteger(bytes) || bytes < 1) return apiError(c, 400, "invalid", t.api.invalid);
+  const { results } = await c.env.DB.prepare(
+    "SELECT * FROM clips WHERE user_id = ? AND status = 'ready' AND favorite = 0 ORDER BY created_at ASC LIMIT 500",
+  )
+    .bind(c.var.user!.id)
+    .all<ClipRow>();
+  const pick: ClipRow[] = [];
+  let freed = 0;
+  for (const r of results) {
+    if (freed >= bytes) break;
+    pick.push(r);
+    freed += r.size_bytes + r.thumb_bytes;
+  }
+  return c.json({
+    clips: await Promise.all(pick.map((r) => clipDto(c, r))),
+    freed_bytes: freed,
+    enough: freed >= bytes,
+  });
 });
 
 api.get("/clips/:id", async (c) => {
@@ -267,8 +301,11 @@ api.patch("/clips/:id", async (c) => {
   if (!parsed.success) return apiError(c, 400, "invalid", t.api.invalid);
   const title = parsed.data.title === undefined ? clip.title : parsed.data.title || t.untitled;
   const vis = parsed.data.visibility ?? clip.visibility;
-  await c.env.DB.prepare("UPDATE clips SET title = ?, visibility = ? WHERE id = ?").bind(title, vis, clip.id).run();
-  return c.json({ clip: await clipDto(c, { ...clip, title, visibility: vis }) });
+  const favorite = parsed.data.favorite === undefined ? clip.favorite : parsed.data.favorite ? 1 : 0;
+  await c.env.DB.prepare("UPDATE clips SET title = ?, visibility = ?, favorite = ? WHERE id = ?")
+    .bind(title, vis, favorite, clip.id)
+    .run();
+  return c.json({ clip: await clipDto(c, { ...clip, title, visibility: vis, favorite }) });
 });
 
 api.delete("/clips/:id", async (c) => {

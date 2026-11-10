@@ -25,6 +25,20 @@ pub struct Clip {
     pub size_bytes: u64,
     pub duration_ms: i64,
     pub url: Option<String>,
+    /// Servidor antigo não manda.
+    #[serde(default)]
+    pub favorite: bool,
+    #[serde(default)]
+    pub created_at: i64,
+}
+
+/// `GET /clips/cleanup`: os clipes mais antigos (sem favoritos) que liberariam o espaço pedido.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+pub struct Cleanup {
+    pub clips: Vec<Clip>,
+    pub freed_bytes: u64,
+    /// `false` = nem apagando todos estes cabe.
+    pub enough: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize)]
@@ -43,6 +57,8 @@ pub struct NewClip {
     pub duration_ms: i64,
     pub width: u32,
     pub height: u32,
+    /// Favorito no app: nunca entra na sugestão do que apagar quando o espaço acaba.
+    pub favorite: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize)]
@@ -136,11 +152,16 @@ impl Me {
 pub struct ApiErrorBody {
     pub code: String,
     pub message: String,
-    /// Só em `storage_full` (507).
+    /// Só em `storage_full` (507) e `quota_exceeded` (409).
     #[serde(default)]
     pub used_bytes: Option<u64>,
     #[serde(default)]
     pub limit_bytes: Option<u64>,
+    #[serde(default)]
+    pub quota_bytes: Option<u64>,
+    /// Quanto falta liberar para o clipe caber (servidor 1.1+).
+    #[serde(default)]
+    pub needed_bytes: Option<u64>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -150,9 +171,16 @@ pub enum CloudError {
     Unauthorized,
     #[error("{}", .body.message)]
     Api { status: u16, body: ApiErrorBody },
-    /// 507 `storage_full`: o servidor inteiro passaria do limite. Tentar de novo não adianta.
+    /// 507 `storage_full` (o servidor inteiro passaria do limite) ou 409 `quota_exceeded`
+    /// (`quota`: a cota do usuário). Tentar de novo só adianta liberando `needed_bytes`.
     #[error("O servidor está cheio.")]
-    StorageFull { used_bytes: u64, limit_bytes: u64 },
+    StorageFull {
+        used_bytes: u64,
+        limit_bytes: u64,
+        /// `None` = servidor antigo (não sugere o que apagar).
+        needed_bytes: Option<u64>,
+        quota: bool,
+    },
     #[error("Sem conexão com o servidor ({0}).")]
     Network(String),
     #[error("cancelado")]
@@ -290,11 +318,23 @@ impl Client {
                 message: format!("O servidor respondeu {status}."),
                 used_bytes: None,
                 limit_bytes: None,
+                quota_bytes: None,
+                needed_bytes: None,
             });
         if status == 507 && body.code == "storage_full" {
             return Err(CloudError::StorageFull {
                 used_bytes: body.used_bytes.unwrap_or(0),
                 limit_bytes: body.limit_bytes.unwrap_or(0),
+                needed_bytes: body.needed_bytes,
+                quota: false,
+            });
+        }
+        if status == 409 && body.code == "quota_exceeded" && body.needed_bytes.is_some() {
+            return Err(CloudError::StorageFull {
+                used_bytes: body.used_bytes.unwrap_or(0),
+                limit_bytes: body.quota_bytes.unwrap_or(0),
+                needed_bytes: body.needed_bytes,
+                quota: true,
             });
         }
         Err(CloudError::Api { status, body })
@@ -498,6 +538,26 @@ impl Client {
             .header("Authorization", &self.auth()?)
             .send_json(serde_json::Value::Object(body))?;
         Ok(Self::json::<ClipWrap>(r)?.clip)
+    }
+
+    /// Marca ou desmarca o favorito no servidor (favorito nunca é sugerido para apagar).
+    pub fn set_favorite(&self, id: &str, favorite: bool) -> Result<Clip> {
+        let r = self
+            .agent
+            .patch(self.url(&format!("/api/v1/clips/{id}")))
+            .header("Authorization", &self.auth()?)
+            .send_json(serde_json::json!({ "favorite": favorite }))?;
+        Ok(Self::json::<ClipWrap>(r)?.clip)
+    }
+
+    /// `GET /clips/cleanup`: o que apagar para liberar `bytes` (o servidor não apaga nada).
+    pub fn cleanup(&self, bytes: u64) -> Result<Cleanup> {
+        let r = self
+            .agent
+            .get(self.url(&format!("/api/v1/clips/cleanup?bytes={bytes}")))
+            .header("Authorization", &self.auth()?)
+            .call()?;
+        Self::json(r)
     }
 
     pub fn delete_clip(&self, id: &str) -> Result<()> {

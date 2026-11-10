@@ -43,10 +43,13 @@ pub enum Failure {
     Cancelled,
     /// Token vencido/revogado: refazer o login.
     Session,
-    /// O servidor inteiro está cheio: os próximos também falhariam.
+    /// Sem espaço (o servidor inteiro ou, com `quota`, a cota do usuário): os próximos
+    /// também falhariam. `needed_bytes` (servidor 1.1+) = quanto falta liberar.
     StorageFull {
         used_bytes: u64,
         limit_bytes: u64,
+        needed_bytes: Option<u64>,
+        quota: bool,
     },
     Error(String),
 }
@@ -65,6 +68,8 @@ pub struct Request {
     pub game: Option<String>,
     /// Quem pode ver (escolhido antes de publicar).
     pub visibility: Visibility,
+    /// Favorito no app (o servidor nunca sugere apagar um favorito).
+    pub favorite: bool,
     pub base: String,
     pub token: Option<String>,
     /// Login já escutando (o navegador já foi aberto) quando não há token.
@@ -88,6 +93,8 @@ struct Shared {
 
 pub struct Job {
     pub clip_id: i64,
+    /// Quem pode ver (para tentar de novo depois de liberar espaço).
+    pub vis: Visibility,
     pub phase: Phase,
     pub login_url: Option<String>,
     /// Parado de verdade por causa do jogo (a thread chegou num ponto de pausa).
@@ -123,6 +130,7 @@ impl Job {
         let pause = Arc::new(AtomicBool::new(paused));
         let job = Job {
             clip_id: req.clip_id,
+            vis: req.visibility,
             phase: if req.login.is_some() {
                 Phase::Login
             } else {
@@ -250,9 +258,13 @@ fn run(req: Request, file: &Path, gate: &Gate) -> Result<String, Failure> {
         CloudError::StorageFull {
             used_bytes,
             limit_bytes,
+            needed_bytes,
+            quota,
         } => Failure::StorageFull {
             used_bytes,
             limit_bytes,
+            needed_bytes,
+            quota,
         },
         e => Failure::Error(e.to_string()),
     };
@@ -330,6 +342,7 @@ fn run(req: Request, file: &Path, gate: &Gate) -> Result<String, Failure> {
         duration_ms: exported.duration_ms,
         width: exported.width,
         height: exported.height,
+        favorite: req.favorite,
     };
     if !gate.go() {
         return Err(Failure::Cancelled);
